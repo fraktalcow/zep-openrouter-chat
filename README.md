@@ -60,21 +60,6 @@ cp backend/.env.example backend/.env
 uv run python backend/server.py
 ```
 
-### Manual Installation
-
-```bash
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -e .
-
-# Configure and run
-cp backend/.env.example backend/.env
-python backend/server.py
-```
-
 ## Configuration
 
 **backend/.env**
