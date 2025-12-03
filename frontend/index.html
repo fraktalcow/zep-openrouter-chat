@@ -3,47 +3,58 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Zep // Knowledge Graph Terminal</title>
+    <title>openagent</title>
     <meta
       name="description"
-      content="Interactive chat with real-time knowledge graph visualization powered by Zep"
+      content="Open agent interface with tool calls and knowledge graph visualization"
     />
 
-    <!-- D3.js -->
-    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <!-- Vis-Network -->
+    <script
+      type="text/javascript"
+      src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"
+    ></script>
+
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
     <!-- Google Fonts: JetBrains Mono is closest to Hermit available on CDN -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
 
     <style>
-      /* CATPPUCCIN MOCHA THEME PALETTE */
+      /* DRACULA THEME PALETTE (Natural & Technical) */
       :root {
-        --ctp-base: #1e1e2e;
-        --ctp-mantle: #181825;
-        --ctp-crust: #11111b;
-        
-        --ctp-text: #cdd6f4;
-        --ctp-subtext1: #bac2de;
-        --ctp-subtext0: #a6adc8;
-        
-        --ctp-surface2: #585b70;
-        --ctp-surface1: #45475a;
-        --ctp-surface0: #313244;
-        
-        --ctp-lavender: #b4befe;
-        --ctp-mauve: #cba6f7;
-        --ctp-blue: #89b4fa;
-        --ctp-green: #a6e3a1;
-        --ctp-red: #f38ba8;
-        --ctp-peach: #fab387;
-        
-        --font-stack: 'Hermit', 'JetBrains Mono', 'Fira Code', monospace;
-        --border-radius: 6px;
+        --ctp-base: #282a36;
+        --ctp-mantle: #21222c;
+        --ctp-crust: #191a21;
+
+        --ctp-text: #f8f8f2;
+        --ctp-subtext1: #e2e2e2;
+        --ctp-subtext0: #6272a4;
+
+        --ctp-surface2: #44475a;
+        --ctp-surface1: #44475a;
+        --ctp-surface0: #44475a;
+
+        --ctp-lavender: #bd93f9; /* Purple */
+        --ctp-mauve: #ff79c6; /* Pink */
+        --ctp-blue: #8be9fd; /* Cyan */
+        --ctp-green: #50fa7b;
+        --ctp-red: #ff5555;
+        --ctp-peach: #ffb86c; /* Orange */
+
+        --font-stack: "Inter", system-ui, -apple-system, sans-serif;
+        --font-mono: "JetBrains Mono", monospace;
+        --border-radius: 4px;
       }
 
       * {
@@ -54,7 +65,7 @@
 
       body {
         font-family: var(--font-stack);
-        background: var(--ctp-base);
+        background: #282a36;
         color: var(--ctp-text);
         height: 100vh;
         overflow: hidden;
@@ -83,13 +94,13 @@
       /* --- LAYOUT --- */
       .app-container {
         display: grid;
-        grid-template-columns: 350px 1fr 400px;
+        grid-template-columns: 320px 1fr 380px;
         grid-template-rows: auto 1fr;
-        gap: 12px;
-        padding: 12px;
+        gap: 16px;
+        padding: 16px;
         height: 100vh;
-        max-width: 2400px;
-        margin: 0 auto;
+        max-width: 100%;
+        margin: 0;
       }
 
       /* --- HEADER --- */
@@ -99,8 +110,9 @@
         justify-content: space-between;
         align-items: center;
         padding: 0.75rem 1.5rem;
-        background: var(--ctp-mantle);
-        border: 1px solid var(--ctp-surface0);
+        background: rgba(40, 42, 54, 0.5);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(68, 71, 90, 0.3);
         border-radius: var(--border-radius);
       }
 
@@ -113,31 +125,35 @@
         gap: 0.5rem;
         letter-spacing: -0.5px;
       }
-      .logo span { color: var(--ctp-lavender); }
+      .logo span {
+        color: var(--ctp-lavender);
+      }
 
       /* --- PANELS --- */
       .panel {
-        background: var(--ctp-mantle);
-        border: 1px solid var(--ctp-surface0);
+        background: rgba(40, 42, 54, 0.4);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(68, 71, 90, 0.3);
         border-radius: var(--border-radius);
         display: flex;
         flex-direction: column;
         overflow: hidden;
         position: relative;
       }
-      
+
       .panel-header {
         padding: 0.75rem 1rem;
-        border-bottom: 1px solid var(--ctp-surface0);
-        background: var(--ctp-crust);
+        border-bottom: 1px solid rgba(68, 71, 90, 0.3);
+        background: rgba(33, 34, 44, 0.4);
+        backdrop-filter: blur(10px);
         display: flex;
         justify-content: space-between;
         align-items: center;
         font-size: 0.85rem;
         font-weight: 700;
         color: var(--ctp-subtext1);
-        text-transform: uppercase;
-        letter-spacing: 1px;
+        text-transform: none;
+        letter-spacing: 0.5px;
       }
 
       .panel-content {
@@ -156,7 +172,7 @@
         gap: 0.5rem;
         margin-bottom: 0.5rem;
       }
-      
+
       label {
         font-size: 0.75rem;
         color: var(--ctp-surface2);
@@ -167,8 +183,9 @@
       textarea,
       select {
         width: 100%;
-        background: var(--ctp-base);
-        border: 1px solid var(--ctp-surface0);
+        background: rgba(40, 42, 54, 0.4);
+        backdrop-filter: blur(5px);
+        border: 1px solid rgba(68, 71, 90, 0.3);
         color: var(--ctp-text);
         font-family: var(--font-stack);
         padding: 0.6rem 0.8rem;
@@ -177,13 +194,18 @@
         transition: border 0.2s;
       }
 
-      input:focus, textarea:focus, select:focus {
+      input:focus,
+      textarea:focus,
+      select:focus {
         outline: none;
         border-color: var(--ctp-lavender);
-        box-shadow: 0 0 0 2px rgba(180, 190, 254, 0.1);
+        box-shadow: 0 0 0 2px rgba(189, 147, 249, 0.1);
       }
 
-      textarea { resize: vertical; min-height: 60px; }
+      textarea {
+        resize: vertical;
+        min-height: 60px;
+      }
 
       /* --- BUTTONS --- */
       button {
@@ -195,28 +217,33 @@
         font-size: 0.85rem;
         border: 1px solid transparent;
         transition: all 0.2s;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        text-transform: none;
+        letter-spacing: normal;
       }
 
       /* Primary Button */
       button:not(.secondary) {
-        background: var(--ctp-mauve);
+        background: rgba(189, 147, 249, 0.6);
+        backdrop-filter: blur(5px);
         color: var(--ctp-base);
+        border: 1px solid rgba(189, 147, 249, 0.3);
       }
       button:not(.secondary):hover {
-        background: var(--ctp-lavender);
-        box-shadow: 0 4px 12px rgba(180, 190, 254, 0.2);
+        background: rgba(189, 147, 249, 0.7);
+        border-color: rgba(189, 147, 249, 0.5);
+        box-shadow: 0 4px 12px rgba(189, 147, 249, 0.2);
       }
 
       /* Secondary Button */
       button.secondary {
-        background: transparent;
-        border: 1px solid var(--ctp-surface1);
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(5px);
+        border: 1px solid rgba(69, 71, 90, 0.3);
         color: var(--ctp-subtext1);
       }
       button.secondary:hover {
-        border-color: var(--ctp-text);
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(205, 214, 244, 0.4);
         color: var(--ctp-text);
       }
 
@@ -229,8 +256,10 @@
         user-select: none;
         font-size: 0.85rem;
       }
-      .toggle-switch input { display: none; }
-      
+      .toggle-switch input {
+        display: none;
+      }
+
       .slider {
         width: 36px;
         height: 18px;
@@ -250,33 +279,38 @@
         left: 3px;
         transition: 0.3s;
       }
-      input:checked + .slider { background: var(--ctp-green); }
-      input:checked + .slider:before { 
-        transform: translateX(18px); 
+      input:checked + .slider {
+        background: var(--ctp-green);
+      }
+      input:checked + .slider:before {
+        transform: translateX(18px);
         background: var(--ctp-base);
+      }
+
+      /* Radio buttons for graph source */
+      input[type="radio"] {
+        margin-right: 0.5rem;
+        accent-color: var(--ctp-green);
+        cursor: pointer;
       }
 
       /* --- GRAPH AREA --- */
       #graph-container {
         flex: 1;
-        background: var(--ctp-base);
-        /* Subtle grid pattern for terminal feel */
-        background-image: 
-          linear-gradient(var(--ctp-surface0) 1px, transparent 1px),
-          linear-gradient(90deg, var(--ctp-surface0) 1px, transparent 1px);
-        background-size: 20px 20px;
-        background-position: center center;
+        background: rgba(40, 42, 54, 0.3);
+        backdrop-filter: blur(5px);
         border-radius: 4px;
         overflow: hidden;
         position: relative;
       }
-      
+
       .graph-stats {
         display: flex;
         gap: 2rem;
         padding: 0.75rem;
-        background: var(--ctp-crust);
-        border-top: 1px solid var(--ctp-surface0);
+        background: rgba(33, 34, 44, 0.4);
+        backdrop-filter: blur(10px);
+        border-top: 1px solid rgba(68, 71, 90, 0.3);
         justify-content: center;
       }
       .stat-item {
@@ -312,50 +346,111 @@
       }
 
       @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(5px); }
-        to { opacity: 1; transform: translateY(0); }
+        from {
+          opacity: 0;
+          transform: translateY(5px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
 
       /* User Message: Aligned Right, Lavender accent */
       .message.user {
         align-self: flex-end;
-        background: rgba(180, 190, 254, 0.1); /* Low opacity lavender */
-        border: 1px solid var(--ctp-lavender);
+        background: rgba(189, 147, 249, 0.15);
+        backdrop-filter: blur(5px);
+        border: 1px solid rgba(189, 147, 249, 0.3);
         border-radius: 8px 8px 0 8px;
         color: var(--ctp-text);
       }
       .message.user::before {
-        content: "YOU";
+        content: "You";
         position: absolute;
         top: -10px;
         right: 0;
         font-size: 0.65rem;
         color: var(--ctp-lavender);
-        background: var(--ctp-mantle);
+        background: rgba(40, 42, 54, 0.8);
+        backdrop-filter: blur(5px);
         padding: 0 4px;
       }
 
       /* Assistant Message: Aligned Left, Surface color */
       .message.assistant {
         align-self: flex-start;
-        background: var(--ctp-surface0);
-        border: 1px solid var(--ctp-surface1);
+        background: rgba(68, 71, 90, 0.4);
+        backdrop-filter: blur(5px);
+        border: 1px solid rgba(69, 71, 90, 0.3);
         border-radius: 8px 8px 8px 0;
         color: var(--ctp-text);
       }
       .message.assistant::before {
-        content: "SYSTEM";
+        content: "AI";
         position: absolute;
         top: -10px;
         left: 0;
         font-size: 0.65rem;
         color: var(--ctp-green);
-        background: var(--ctp-mantle);
+        background: rgba(40, 42, 54, 0.8);
+        backdrop-filter: blur(5px);
         padding: 0 4px;
       }
 
-      .message strong { color: var(--ctp-peach); }
-      
+      .message strong {
+        color: var(--ctp-peach);
+      }
+
+      .message.tool-result {
+        border-left: 3px solid var(--ctp-blue);
+      }
+
+      /* Markdown styling */
+      .message h1,
+      .message h2,
+      .message h3 {
+        color: var(--ctp-lavender);
+        margin: 0.5rem 0;
+      }
+      .message code {
+        background: var(--ctp-crust);
+        padding: 0.2rem 0.4rem;
+        border-radius: 3px;
+        font-family: var(--font-mono);
+        font-size: 0.85em;
+        color: var(--ctp-green);
+      }
+      .message pre {
+        background: var(--ctp-crust);
+        padding: 0.75rem;
+        border-radius: 4px;
+        overflow-x: auto;
+        margin: 0.5rem 0;
+      }
+      .message pre code {
+        background: transparent;
+        padding: 0;
+      }
+      .message ul,
+      .message ol {
+        margin: 0.5rem 0;
+        padding-left: 1.5rem;
+      }
+      .message blockquote {
+        border-left: 3px solid var(--ctp-lavender);
+        padding-left: 1rem;
+        margin: 0.5rem 0;
+        color: var(--ctp-subtext0);
+      }
+      .message a {
+        color: var(--ctp-blue);
+        text-decoration: none;
+      }
+      .message a:hover {
+        text-decoration: underline;
+      }
+
       /* Fact box styling */
       .retrieved-facts {
         margin-top: 8px;
@@ -364,8 +459,13 @@
         font-size: 0.8rem;
         color: var(--ctp-subtext0);
       }
-      .retrieved-facts ul { padding-left: 1.5rem; margin-top: 4px; }
-      .retrieved-facts li::marker { color: var(--ctp-blue); }
+      .retrieved-facts ul {
+        padding-left: 1.5rem;
+        margin-top: 4px;
+      }
+      .retrieved-facts li::marker {
+        color: var(--ctp-blue);
+      }
 
       /* Input Area */
       .input-area {
@@ -373,14 +473,14 @@
         display: flex;
         gap: 0.75rem;
         padding-top: 1rem;
-        border-top: 1px solid var(--ctp-surface0);
+        border-top: 1px solid rgba(68, 71, 90, 0.3);
       }
       .input-wrapper {
         position: relative;
         flex: 1;
       }
       .input-wrapper::before {
-        content: ">";
+        content: "";
         position: absolute;
         left: 10px;
         top: 50%;
@@ -389,14 +489,68 @@
         font-weight: 700;
       }
       #message-input {
-        padding-left: 2rem; 
+        padding-left: 1rem;
         height: 100%;
+      }
+
+      /* Tool Palette */
+      .tool-palette {
+        position: absolute;
+        bottom: 100%;
+        left: 0;
+        right: 0;
+        margin-bottom: 0.5rem;
+        background: rgba(40, 42, 54, 0.95);
+        backdrop-filter: blur(15px);
+        border: 1px solid rgba(68, 71, 90, 0.5);
+        border-radius: 8px;
+        max-height: 300px;
+        overflow-y: auto;
+        z-index: 1000;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      }
+
+      .tool-item {
+        padding: 0.75rem 1rem;
+        cursor: pointer;
+        border-bottom: 1px solid rgba(68, 71, 90, 0.3);
+        transition: background 0.2s;
+      }
+
+      .tool-item:last-child {
+        border-bottom: none;
+      }
+
+      .tool-item:hover,
+      .tool-item:focus {
+        background: rgba(189, 147, 249, 0.1);
+        outline: none;
+      }
+
+      .tool-name {
+        font-weight: 600;
+        color: var(--ctp-lavender);
+        font-size: 0.9rem;
+        margin-bottom: 0.25rem;
+      }
+
+      .tool-description {
+        font-size: 0.8rem;
+        color: var(--ctp-subtext0);
+      }
+
+      .tool-item-empty {
+        padding: 1rem;
+        text-align: center;
+        color: var(--ctp-subtext0);
+        font-size: 0.85rem;
       }
 
       /* Context Block Code Style */
       #context-block {
-        background: var(--ctp-crust);
-        border: 1px solid var(--ctp-surface0);
+        background: rgba(33, 34, 44, 0.4);
+        backdrop-filter: blur(5px);
+        border: 1px solid rgba(68, 71, 90, 0.3);
         color: var(--ctp-subtext0);
         padding: 0.75rem;
         border-radius: 4px;
@@ -407,145 +561,384 @@
 
       /* --- MODAL --- */
       .modal-overlay {
-        position: fixed; inset: 0;
-        background: rgba(30, 30, 46, 0.85); /* Base with opacity */
+        position: fixed;
+        inset: 0;
+        background: rgba(40, 42, 54, 0.85); /* Base with opacity */
         backdrop-filter: blur(4px);
-        display: flex; justify-content: center; align-items: center;
+        display: flex;
+        justify-content: center;
+        align-items: center;
         z-index: 999;
-        opacity: 0; pointer-events: none;
+        opacity: 0;
+        pointer-events: none;
         transition: 0.2s;
       }
-      .modal-overlay.active { opacity: 1; pointer-events: all; }
-      
+      .modal-overlay.active {
+        opacity: 1;
+        pointer-events: all;
+      }
+
       .modal {
-        background: var(--ctp-mantle);
-        border: 1px solid var(--ctp-mauve);
+        background: rgba(40, 42, 54, 0.6);
+        backdrop-filter: blur(15px);
+        border: 1px solid rgba(189, 147, 249, 0.3);
         width: 600px;
         max-width: 90%;
         border-radius: 8px;
-        box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
       }
-      
+
       .modal-header {
         padding: 1rem;
-        border-bottom: 1px solid var(--ctp-surface0);
-        display: flex; justify-content: space-between; align-items: center;
+        border-bottom: 1px solid rgba(68, 71, 90, 0.3);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
       }
-      .modal-body { padding: 1rem; }
-      .modal-footer { padding: 1rem; border-top: 1px solid var(--ctp-surface0); display: flex; justify-content: flex-end; gap: 1rem; }
+      .modal-body {
+        padding: 1rem;
+      }
+      .modal-footer {
+        padding: 1rem;
+        border-top: 1px solid rgba(68, 71, 90, 0.3);
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+      }
 
       #schema-editor {
         font-family: var(--font-stack);
-        background: var(--ctp-base);
+        background: rgba(40, 42, 54, 0.4);
+        backdrop-filter: blur(5px);
         color: var(--ctp-green);
-        border: 1px solid var(--ctp-surface0);
+        border: 1px solid rgba(68, 71, 90, 0.3);
       }
 
       /* --- RESPONSIVE --- */
-      @media (max-width: 1200px) {
+      @media (max-width: 1280px) {
         .app-container {
-          grid-template-columns: 320px 1fr;
+          grid-template-columns: 300px 1fr;
           grid-template-rows: auto 1fr 1fr;
         }
-        /* Chat moves to bottom */
-        .panel:nth-child(4) { grid-column: 2; grid-row: 2 / 4; }
-        /* Graph moves to bottom left */
-        .panel:nth-child(3) { grid-column: 1; grid-row: 2 / 4; }
+
+        /* Settings Panel: Left Column, Full Height */
+        .panel:nth-child(2) {
+          grid-column: 1;
+          grid-row: 2 / 4;
+        }
+
+        /* Graph Panel: Right Column, Top Half */
+        .panel:nth-child(3) {
+          grid-column: 2;
+          grid-row: 2;
+        }
+
+        /* Chat Panel: Right Column, Bottom Half */
+        .panel:nth-child(4) {
+          grid-column: 2;
+          grid-row: 3;
+        }
       }
 
       @media (max-width: 900px) {
         .app-container {
-          grid-template-columns: 1fr;
-          grid-template-rows: auto auto 400px 1fr;
+          display: flex;
+          flex-direction: column;
+          height: auto;
           overflow-y: auto;
-          display: block; /* Flex or Block for scrolling mobile */
         }
-        header { margin-bottom: 1rem; }
-        .panel { margin-bottom: 1rem; min-height: 400px; }
+        body {
+          overflow: auto;
+        }
+        header {
+          margin-bottom: 1rem;
+        }
+        .panel {
+          margin-bottom: 1rem;
+          min-height: 500px;
+        }
+        #graph-container {
+          min-height: 400px;
+        }
       }
     </style>
   </head>
   <body>
-
     <div class="app-container">
       <header>
-        <div class="logo"><span>//</span> ZEP_KNOWLEDGE_GRAPH</div>
-        <div class="header-controls" style="display:flex; gap:0.5rem">
-          <button class="secondary" onclick="openSchemaModal()">_EDIT_SCHEMA</button>
-          <button onclick="initSession(true)">_NEW_SESSION</button>
+        <div class="logo">openagent</div>
+        <div class="header-controls" style="display: flex; gap: 0.5rem">
+          <button class="secondary" onclick="openSchemaModal()">
+            Edit Schema
+          </button>
+          <button onclick="initSession(true)">New Session</button>
         </div>
       </header>
 
-      <!-- Panel 1: Settings -->
+      <!-- Panel 1: Configuration -->
       <div class="panel">
         <div class="panel-header">
-          <span>:: SYSTEM_CONFIG</span>
+          <span>Configuration</span>
         </div>
         <div class="panel-content">
-          <div class="control-group">
-            <label class="toggle-switch">
-              <input type="checkbox" id="gemini-toggle" checked />
-              <span class="slider"></span>
-              <span>USE_GEMINI_API</span>
-            </label>
-          </div>
-
-          <div class="input-group">
-            <label>AI MODEL</label>
-            <select id="model-select">
-              <option value="gemini-1.5-flash">Gemini 1.5 Flash (Fast)</option>
-              <option value="gemini-1.5-pro">Gemini 1.5 Pro (Reasoning)</option>
-              <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash Exp</option>
-            </select>
-          </div>
-
-          <hr style="border: 0; border-top: 1px dashed var(--ctp-surface0); margin: 0.5rem 0;" />
-
-          <div style="display: flex; gap: 0.5rem">
-            <div class="input-group" style="flex:1">
-              <label>F_NAME</label>
-              <input type="text" id="first-name" value="User" />
+          <!-- UNIVERSAL CHAT API SECTION -->
+          <div class="config-section">
+            <div
+              class="section-header"
+              style="
+                color: var(--ctp-blue);
+                margin-bottom: 0.5rem;
+                font-weight: 700;
+                font-size: 0.8rem;
+              "
+            >
+              UNIVERSAL CHAT API
             </div>
-            <div class="input-group" style="flex:1">
-              <label>L_NAME</label>
-              <input type="text" id="last-name" value="Guest" />
-            </div>
-          </div>
 
-          <div class="input-group">
-            <label>TRAITS</label>
-            <textarea id="traits-input">Curious, detail oriented.</textarea>
-          </div>
-          
-          <div class="input-group">
-            <label>PREFERENCES</label>
-            <textarea id="preferences-input">Enjoys structured, actionable answers.</textarea>
-          </div>
-
-          <div class="input-group">
-            <label>BUSINESS_DATA</label>
-            <textarea id="business-data-input">Add more context here.</textarea>
-          </div>
-
-          <div style="margin-top: 0.5rem">
-            <label style="margin-bottom:0.5rem; display:block">MEMORY_MODULES</label>
-            <div style="display: flex; gap: 1.5rem;">
+            <div class="control-group">
               <label class="toggle-switch">
-                <input type="checkbox" id="memory-toggle" checked />
+                <input type="checkbox" id="ai-toggle" checked />
                 <span class="slider"></span>
-                <span>MEM</span>
-              </label>
-              <label class="toggle-switch">
-                <input type="checkbox" id="retrieval-toggle" checked />
-                <span class="slider"></span>
-                <span>RAG</span>
+                <span>Enable AI Generation</span>
               </label>
             </div>
+
+            <div class="input-group">
+              <label>Model</label>
+              <select id="model-select">
+                <option value="meta-llama/llama-3.2-3b-instruct:free">
+                  Loading models...
+                </option>
+              </select>
+            </div>
+
+            <div style="display: flex; gap: 0.5rem">
+              <div class="input-group" style="flex: 1">
+                <label>Temperature (<span id="temp-val">0.7</span>)</label>
+                <input
+                  type="range"
+                  id="temp-input"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  value="0.7"
+                  oninput="document.getElementById('temp-val').textContent = this.value"
+                  style="width: 100%; accent-color: var(--ctp-mauve)"
+                />
+              </div>
+              <div class="input-group" style="flex: 1">
+                <label>Max Tokens</label>
+                <input
+                  type="number"
+                  id="max-tokens-input"
+                  value="1024"
+                  min="1"
+                  max="100000"
+                />
+              </div>
+            </div>
           </div>
 
-          <div style="flex: 1; display: flex; flex-direction: column; margin-top: 1rem; min-height: 150px;">
-            <label style="margin-bottom:0.5rem">LIVE_CONTEXT_STREAM</label>
-            <pre id="context-block">Awaiting initialization...</pre>
+          <hr
+            style="
+              border: 0;
+              border-top: 1px dashed var(--ctp-surface0);
+              margin: 1rem 0;
+            "
+          />
+
+          <!-- GRAPH SOURCE SECTION -->
+          <div class="config-section">
+            <div
+              class="section-header"
+              style="
+                color: var(--ctp-green);
+                margin-bottom: 0.5rem;
+                font-weight: 700;
+                font-size: 0.8rem;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+              "
+            >
+              <span>GRAPH SOURCE</span>
+              <label class="toggle-switch" style="margin: 0">
+                <input
+                  type="checkbox"
+                  id="zep-toggle"
+                  checked
+                  onchange="toggleZepSettings()"
+                />
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div
+              style="
+                margin-bottom: 0.75rem;
+                display: flex;
+                gap: 1rem;
+                align-items: center;
+              "
+            >
+              <label
+                style="display: flex; align-items: center; cursor: pointer"
+              >
+                <input
+                  type="radio"
+                  name="graph-source"
+                  id="graph-source-zep"
+                  value="zep"
+                  checked
+                  onchange="updateGraphSource()"
+                />
+                <span style="margin-left: 0.5rem">Zep (Cloud API)</span>
+              </label>
+              <label
+                style="display: flex; align-items: center; cursor: pointer"
+              >
+                <input
+                  type="radio"
+                  name="graph-source"
+                  id="graph-source-local"
+                  value="local"
+                  onchange="updateGraphSource()"
+                />
+                <span style="margin-left: 0.5rem">Local GraphRAG</span>
+              </label>
+            </div>
+
+            <div
+              id="local-graphrag-settings"
+              style="
+                display: none;
+                margin-top: 0.75rem;
+                padding: 0.75rem;
+                background: rgba(33, 34, 44, 0.4);
+                backdrop-filter: blur(5px);
+                border-radius: 4px;
+                border: 1px solid rgba(68, 71, 90, 0.3);
+              "
+            >
+              <div
+                style="
+                  font-size: 0.75rem;
+                  color: var(--ctp-subtext0);
+                  margin-bottom: 0.5rem;
+                "
+              >
+                Local GraphRAG: Process documents locally without API calls
+              </div>
+              <div class="input-group">
+                <label>Document Paths (one per line)</label>
+                <textarea
+                  id="document-paths-input"
+                  style="
+                    min-height: 60px;
+                    font-family: var(--font-mono);
+                    font-size: 0.8rem;
+                  "
+                  placeholder="/path/to/doc1.md&#10;/path/to/doc2.md"
+                ></textarea>
+              </div>
+              <button
+                onclick="ingestDocuments()"
+                style="width: 100%; margin-top: 0.5rem"
+              >
+                Ingest Documents
+              </button>
+              <div
+                id="local-graphrag-status"
+                style="
+                  margin-top: 0.5rem;
+                  font-size: 0.75rem;
+                  color: var(--ctp-subtext0);
+                "
+              ></div>
+            </div>
+
+            <div id="zep-settings">
+              <div style="display: flex; gap: 0.5rem">
+                <div class="input-group" style="flex: 1">
+                  <label>First Name</label>
+                  <input type="text" id="first-name" value="User" />
+                </div>
+                <div class="input-group" style="flex: 1">
+                  <label>Last Name</label>
+                  <input type="text" id="last-name" value="Guest" />
+                </div>
+              </div>
+
+              <div class="input-group">
+                <label>Traits</label>
+                <textarea id="traits-input" style="min-height: 40px">
+Curious, detail oriented.</textarea
+                >
+              </div>
+
+              <div class="input-group">
+                <label>Preferences</label>
+                <textarea id="preferences-input" style="min-height: 40px">
+Enjoys structured, actionable answers.</textarea
+                >
+              </div>
+
+              <div class="input-group">
+                <label>Business Data</label>
+                <textarea id="business-data-input" style="min-height: 40px">
+Add data here</textarea
+                >
+              </div>
+
+              <div style="margin-top: 0.5rem">
+                <label style="margin-bottom: 0.5rem; display: block"
+                  >Memory Modules</label
+                >
+                <div style="display: flex; gap: 1.5rem">
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="memory-toggle" checked />
+                    <span class="slider"></span>
+                    <span>Mem</span>
+                  </label>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="retrieval-toggle" checked />
+                    <span class="slider"></span>
+                    <span>RAG</span>
+                  </label>
+                </div>
+              </div>
+
+              <div
+                style="
+                  flex: 1;
+                  display: flex;
+                  flex-direction: column;
+                  margin-top: 1rem;
+                  min-height: 100px;
+                "
+              >
+                <label style="margin-bottom: 0.5rem">Live Context Stream</label>
+                <pre
+                  id="context-block"
+                  style="max-height: 150px; overflow-y: auto"
+                >
+Awaiting initialization...</pre
+                >
+              </div>
+            </div>
+
+            <div
+              id="zep-disabled-msg"
+              style="
+                display: none;
+                color: var(--ctp-surface2);
+                font-style: italic;
+                padding: 1rem;
+                text-align: center;
+              "
+            >
+              GraphRAG is disabled. Chat will be stateless.
+            </div>
           </div>
         </div>
       </div>
@@ -553,24 +946,43 @@
       <!-- Panel 2: Graph -->
       <div class="panel">
         <div class="panel-header">
-          <span>:: VISUALIZATION_MATRIX</span>
+          <span>Graph</span>
           <div style="display: flex; gap: 0.5rem">
-            <button class="secondary" style="padding: 0.3rem 0.6rem; font-size: 0.7rem" onclick="refreshGraph()">REFRESH</button>
-            <button class="secondary" style="padding: 0.3rem 0.6rem; font-size: 0.7rem" onclick="resetZoom()">RESET</button>
+            <button
+              class="secondary"
+              style="padding: 0.3rem 0.6rem; font-size: 0.7rem"
+              onclick="refreshGraph()"
+            >
+              Refresh
+            </button>
+            <button
+              class="secondary"
+              style="padding: 0.3rem 0.6rem; font-size: 0.7rem"
+              onclick="resetZoom()"
+            >
+              Reset
+            </button>
           </div>
         </div>
-        <div class="panel-content" style="padding: 0; flex-direction: column; display:flex;">
-          <div id="graph-container">
-            <svg id="graph-svg" style="width:100%; height:100%"></svg>
-          </div>
+        <div
+          class="panel-content"
+          style="padding: 0; flex-direction: column; display: flex"
+        >
+          <div id="graph-container" style="height: 100%; width: 100%"></div>
           <div class="graph-stats">
             <div class="stat-item">
               <div id="node-count" class="stat-value">0</div>
-              <div class="stat-label">NODES</div>
+              <div class="stat-label">Nodes</div>
             </div>
             <div class="stat-item">
-              <div id="edge-count" class="stat-value" style="color: var(--ctp-mauve)">0</div>
-              <div class="stat-label">EDGES</div>
+              <div
+                id="edge-count"
+                class="stat-value"
+                style="color: var(--ctp-mauve)"
+              >
+                0
+              </div>
+              <div class="stat-label">Edges</div>
             </div>
           </div>
         </div>
@@ -579,18 +991,38 @@
       <!-- Panel 3: Chat -->
       <div class="panel">
         <div class="panel-header">
-          <span>:: COMM_UPLINK</span>
-          <span id="session-badge" style="color: var(--ctp-green); font-size: 0.75rem">ID: NULL</span>
+          <span>Chat</span>
+          <span
+            id="session-badge"
+            style="color: var(--ctp-green); font-size: 0.75rem"
+            >ID: NULL</span
+          >
         </div>
         <div class="panel-content">
           <div id="chat-box">
-            <div style="text-align: center; color: var(--ctp-surface2); margin-top: 50%;">
-              <p>// SYSTEM READY //<br>Initiate conversation sequence.</p>
+            <div
+              style="
+                text-align: center;
+                color: var(--ctp-surface2);
+                margin-top: 50%;
+              "
+            >
+              <p>System Ready.<br />Start the conversation.</p>
             </div>
           </div>
           <div class="input-area">
-            <div class="input-wrapper">
-              <input type="text" id="message-input" placeholder="Enter command..." autocomplete="off" />
+            <div class="input-wrapper" style="position: relative">
+              <input
+                type="text"
+                id="message-input"
+                placeholder="Type your message..."
+                autocomplete="off"
+              />
+              <div
+                id="tool-palette"
+                class="tool-palette"
+                style="display: none"
+              ></div>
             </div>
             <button onclick="sendMessage()" id="send-btn">SEND</button>
           </div>
@@ -602,335 +1034,37 @@
     <div class="modal-overlay" id="schema-modal">
       <div class="modal">
         <div class="modal-header">
-          <span style="font-weight:700">EDIT_SCHEMA.JSON</span>
-          <button class="secondary" onclick="closeSchemaModal()" style="border:none; padding:0; color: var(--ctp-red)">✕</button>
+          <span style="font-weight: 700">Edit Schema</span>
+          <button
+            class="secondary"
+            onclick="closeSchemaModal()"
+            style="border: none; padding: 0; color: var(--ctp-red)"
+          >
+            ✕
+          </button>
         </div>
         <div class="modal-body">
-          <p style="margin-bottom: 1rem; color: var(--ctp-subtext0); font-size: 0.85rem;">
-            > Modifying ontology definitions...
+          <p
+            style="
+              margin-bottom: 1rem;
+              color: var(--ctp-subtext0);
+              font-size: 0.85rem;
+            "
+          >
+            Modifying ontology definitions...
           </p>
-          <textarea id="schema-editor" style="height: 300px; font-size: 0.85rem;"></textarea>
+          <textarea
+            id="schema-editor"
+            style="height: 300px; font-size: 0.85rem"
+          ></textarea>
         </div>
         <div class="modal-footer">
           <button class="secondary" onclick="closeSchemaModal()">CANCEL</button>
-          <button onclick="saveSchema()">WRITE_TO_DISK</button>
+          <button onclick="saveSchema()">Save</button>
         </div>
       </div>
     </div>
 
-    <script>
-      // --- STATE & CONFIG ---
-      let sessionId = null;
-      let userId = null;
-      let graphData = { nodes: [], edges: [] };
-      
-      // Get JS computed styles for D3 to match CSS variables
-      const style = getComputedStyle(document.body);
-      const COLORS = {
-        nodeFill: style.getPropertyValue('--ctp-lavender').trim() || '#b4befe',
-        nodeStroke: style.getPropertyValue('--ctp-base').trim() || '#1e1e2e',
-        text: style.getPropertyValue('--ctp-text').trim() || '#cdd6f4',
-        link: style.getPropertyValue('--ctp-surface2').trim() || '#585b70'
-      };
-
-      // Elements
-      const chatBox = document.getElementById("chat-box");
-      const messageInput = document.getElementById("message-input");
-      const contextBlock = document.getElementById("context-block");
-      const schemaModal = document.getElementById("schema-modal");
-      const schemaEditor = document.getElementById("schema-editor");
-
-      // --- INITIALIZATION ---
-      document.addEventListener("DOMContentLoaded", () => {
-        initSession();
-        fetchSchema();
-      });
-
-      // --- SCHEMA LOGIC ---
-      async function fetchSchema() {
-        try {
-          const res = await fetch("/schema");
-          const data = await res.json();
-          schemaEditor.value = JSON.stringify(data, null, 2);
-        } catch (e) {
-          console.error("Failed to fetch schema", e);
-        }
-      }
-
-      function openSchemaModal() {
-        schemaModal.classList.add("active");
-      }
-
-      function closeSchemaModal() {
-        schemaModal.classList.remove("active");
-      }
-
-      async function saveSchema() {
-        try {
-          const schema = JSON.parse(schemaEditor.value);
-          const res = await fetch("/schema", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(schema),
-          });
-          const result = await res.json();
-          if (result.status === "success") {
-            closeSchemaModal();
-            // Optional: visual feedback
-            alert("Schema Updated Successfully");
-          }
-        } catch (e) {
-          alert("Error: Invalid JSON");
-          console.error(e);
-        }
-      }
-
-      // --- SESSION LOGIC ---
-      async function initSession(forceNew = false) {
-        if (!forceNew && sessionId) return;
-
-        const payload = {
-          first_name: document.getElementById("first-name").value,
-          last_name: document.getElementById("last-name").value,
-          traits: document.getElementById("traits-input").value,
-          preferences: document.getElementById("preferences-input").value,
-          business_data: document.getElementById("business-data-input").value,
-        };
-
-        try {
-          const res = await fetch("/session", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          const data = await res.json();
-          sessionId = data.session_id;
-          userId = data.user_id;
-
-          document.getElementById("session-badge").textContent = `ID: ${
-            sessionId.split("_")[1] || sessionId
-          }`;
-          chatBox.innerHTML = "";
-          graphData = { nodes: [], edges: [] };
-          renderGraph();
-
-          addMessage("system", "Session initialized. Uplink established.");
-        } catch (e) {
-          console.error("Session init failed", e);
-        }
-      }
-
-      // --- CHAT LOGIC ---
-      async function sendMessage() {
-        const text = messageInput.value.trim();
-        if (!text || !sessionId) return;
-
-        // Visual Optimistic Update
-        const userMsgEl = addMessage("user", text);
-        messageInput.value = "";
-
-        const useGemini = document.getElementById("gemini-toggle").checked;
-        const useMemory = document.getElementById("memory-toggle").checked;
-        const useRetrieval = document.getElementById("retrieval-toggle").checked;
-        const modelName = document.getElementById("model-select").value;
-
-        try {
-          const res = await fetch("/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              session_id: sessionId,
-              message: text,
-              use_memory: useMemory,
-              use_retrieval: useRetrieval,
-              use_gemini: useGemini,
-              model_name: modelName,
-            }),
-          });
-
-          const data = await res.json();
-
-          // Render Facts nicely
-          if (
-            data.context_block &&
-            data.context_block.sections &&
-            data.context_block.sections.graph_facts &&
-            data.context_block.sections.graph_facts.length > 0
-          ) {
-            const factsDiv = document.createElement("div");
-            factsDiv.className = "retrieved-facts";
-            
-            const factsHeader = document.createElement("div");
-            factsHeader.innerHTML = "<strong>:: RETRIEVED_NODES</strong>";
-            factsDiv.appendChild(factsHeader);
-
-            const factsList = document.createElement("ul");
-            data.context_block.sections.graph_facts.forEach((fact) => {
-              const li = document.createElement("li");
-              li.textContent = fact;
-              factsList.appendChild(li);
-            });
-
-            factsDiv.appendChild(factsList);
-            userMsgEl.appendChild(factsDiv);
-            chatBox.scrollTop = chatBox.scrollHeight;
-          }
-
-          addMessage("assistant", data.response);
-
-          if (data.context_block && data.context_block.rendered) {
-            contextBlock.textContent = data.context_block.rendered;
-          }
-
-          refreshGraph();
-        } catch (e) {
-          addMessage("system", "Error: Uplink failed. " + e.message);
-          console.error(e);
-        }
-      }
-
-      function addMessage(role, text) {
-        const div = document.createElement("div");
-        div.className = `message ${role}`;
-        
-        // Convert simple text to HTML-safe text, but allow inner structure if passed later
-        const textSpan = document.createElement("span");
-        textSpan.textContent = text;
-        div.appendChild(textSpan);
-        
-        chatBox.appendChild(div);
-        chatBox.scrollTop = chatBox.scrollHeight;
-        return div;
-      }
-
-      messageInput.addEventListener("keypress", (e) => {
-        if (e.key === "Enter") sendMessage();
-      });
-
-      // --- GRAPH VISUALIZATION (D3) ---
-      async function refreshGraph() {
-        if (!userId) return;
-        try {
-          const res = await fetch(`/graph/${userId}`);
-          const data = await res.json();
-          graphData = data;
-          renderGraph();
-
-          document.getElementById("node-count").textContent = data.nodes.length;
-          document.getElementById("edge-count").textContent = data.edges.length;
-        } catch (e) {
-          console.error("Graph refresh failed", e);
-        }
-      }
-
-      function renderGraph() {
-        const container = document.getElementById("graph-container");
-        const width = container.clientWidth;
-        const height = container.clientHeight;
-
-        const svg = d3.select("#graph-svg");
-        svg.selectAll("*").remove();
-
-        if (!graphData.nodes.length) return;
-
-        const simulation = d3
-          .forceSimulation(graphData.nodes)
-          .force("link", d3.forceLink(graphData.edges).id((d) => d.uuid).distance(80))
-          .force("charge", d3.forceManyBody().strength(-200))
-          .force("center", d3.forceCenter(width / 2, height / 2))
-          .force("collide", d3.forceCollide(15)); // Prevent overlap
-
-        // Edges
-        const link = svg
-          .append("g")
-          .selectAll("line")
-          .data(graphData.edges)
-          .join("line")
-          .attr("stroke", COLORS.link)
-          .attr("stroke-opacity", 0.6)
-          .attr("stroke-width", 1.5);
-
-        // Nodes
-        const node = svg
-          .append("g")
-          .selectAll("g")
-          .data(graphData.nodes)
-          .join("g")
-          .attr("class", "node")
-          .call(
-            d3
-              .drag()
-              .on("start", dragstarted)
-              .on("drag", dragged)
-              .on("end", dragended)
-          );
-
-        node
-          .append("circle")
-          .attr("r", 6)
-          .attr("fill", COLORS.nodeFill)
-          .attr("stroke", COLORS.nodeStroke)
-          .attr("stroke-width", 2);
-
-        node
-          .append("text")
-          .attr("dy", -10)
-          .attr("text-anchor", "middle")
-          .text((d) => d.name || d.uuid.substring(0, 8))
-          .style("fill", COLORS.text)
-          .style("font-size", "10px")
-          .style("font-family", "JetBrains Mono, monospace")
-          .style("pointer-events", "none")
-          .style("text-shadow", "0 1px 3px rgba(0,0,0,0.8)");
-
-        simulation.on("tick", () => {
-          link
-            .attr("x1", (d) => d.source.x)
-            .attr("y1", (d) => d.source.y)
-            .attr("x2", (d) => d.target.x)
-            .attr("y2", (d) => d.target.y);
-
-          node.attr("transform", (d) => `translate(${d.x},${d.y})`);
-        });
-
-        // Zoom capabilities
-        const zoom = d3
-          .zoom()
-          .scaleExtent([0.1, 4])
-          .on("zoom", (event) => {
-            svg.selectAll("g").attr("transform", event.transform);
-          });
-        svg.call(zoom);
-
-        function dragstarted(event, d) {
-          if (!event.active) simulation.alphaTarget(0.3).restart();
-          d.fx = d.x;
-          d.fy = d.y;
-        }
-
-        function dragged(event, d) {
-          d.fx = event.x;
-          d.fy = event.y;
-        }
-
-        function dragended(event, d) {
-          if (!event.active) simulation.alphaTarget(0);
-          d.fx = null;
-          d.fy = null;
-        }
-      }
-
-      function resetZoom() {
-        const svg = d3.select("#graph-svg");
-        svg
-          .transition()
-          .duration(750)
-          .call(d3.zoom().transform, d3.zoomIdentity);
-      }
-
-      window.addEventListener("resize", () => {
-        if (graphData.nodes.length > 0) renderGraph();
-      });
-    </script>
+    <script src="/static/app.js"></script>
   </body>
 </html>

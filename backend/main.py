@@ -4,23 +4,23 @@ import uuid
 
 from dotenv import load_dotenv
 
-from gemini_service import GeminiService
 from graph_config import CUSTOM_ENTITIES, CUSTOM_EDGES, DEFAULT_CONTEXT_TEMPLATE
+from openrouter_service import OpenRouterService
 from zep_service import ZepService
 
 # Load environment variables
 load_dotenv()
 
 ZEP_API_KEY = os.getenv("ZEP_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 
 async def main():
-    if not ZEP_API_KEY or not GEMINI_API_KEY:
-        raise RuntimeError("Set ZEP_API_KEY and GEMINI_API_KEY in backend/.env")
+    if not ZEP_API_KEY or not OPENROUTER_API_KEY:
+        raise RuntimeError("Set ZEP_API_KEY and OPENROUTER_API_KEY in backend/.env")
 
     zep_service = ZepService(ZEP_API_KEY)
-    gemini_service = GeminiService(GEMINI_API_KEY)
+    openrouter_service = OpenRouterService(OPENROUTER_API_KEY)
 
     await zep_service.ensure_ontology(CUSTOM_ENTITIES, CUSTOM_EDGES)
 
@@ -62,8 +62,11 @@ async def main():
             query=user_input,
         )
 
-        response_text = await gemini_service.generate_response(prompt)
-        print(f"Gemini: {response_text}")
+        response_text = await openrouter_service.generate_response(
+            prompt,
+            model_name="google/gemini-2.0-flash-exp:free"
+        )
+        print(f"AI: {response_text}")
 
         await zep_service.add_memory(session_id, "assistant", response_text)
 
