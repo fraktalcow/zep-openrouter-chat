@@ -1,2 +1,2 @@
-- add integration with langchain (for func calling and )
-- use a
+- add integration with langchain (for func calling and tools)
+-
