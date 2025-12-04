@@ -1,5 +1,7 @@
 ---
 trigger: always_on
-glob:
-description:
 ---
+
+- use UV
+- write modular clean readable code
+- less code

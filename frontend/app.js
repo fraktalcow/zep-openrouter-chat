@@ -6,11 +6,11 @@ let graphData = { nodes: [], edges: [] };
 // Get JS computed styles for D3 to match CSS variables
 const style = getComputedStyle(document.body);
 const COLORS = {
-  nodeFill: style.getPropertyValue('--ctp-lavender').trim() || '#bd93f9',
-  nodeStroke: style.getPropertyValue('--ctp-base').trim() || '#282a36',
-  text: style.getPropertyValue('--ctp-text').trim() || '#f8f8f2',
-  link: style.getPropertyValue('--ctp-surface2').trim() || '#44475a',
-  background: style.getPropertyValue('--ctp-base').trim() || '#282a36'
+  nodeFill: style.getPropertyValue("--ctp-lavender").trim() || "#bd93f9",
+  nodeStroke: style.getPropertyValue("--ctp-base").trim() || "#282a36",
+  text: style.getPropertyValue("--ctp-text").trim() || "#f8f8f2",
+  link: style.getPropertyValue("--ctp-surface2").trim() || "#44475a",
+  background: style.getPropertyValue("--ctp-base").trim() || "#282a36",
 };
 
 // Elements

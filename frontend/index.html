@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>openagent</title>
+    <title>zep-openrouter-agent</title>
     <meta
       name="description"
       content="Open agent interface with tool calls and knowledge graph visualization"
@@ -31,7 +31,7 @@
     />
 
     <style>
-      /* DRACULA THEME PALETTE (Natural & Technical) */
+      /* DRACULA THEME PALETTE  */
       :root {
         --ctp-base: #282a36;
         --ctp-mantle: #21222c;
@@ -94,7 +94,7 @@
       /* --- LAYOUT --- */
       .app-container {
         display: grid;
-        grid-template-columns: 320px 1fr 380px;
+        grid-template-columns: 320px minmax(0, 1.4fr) minmax(0, 1.1fr);
         grid-template-rows: auto 1fr;
         gap: 16px;
         padding: 16px;
@@ -139,6 +139,18 @@
         flex-direction: column;
         overflow: hidden;
         position: relative;
+      }
+
+      .config-panel {
+        /* Uses default grid placement */
+      }
+
+      .graph-panel {
+        /* Uses default grid placement */
+      }
+
+      .chat-panel {
+        /* Uses default grid placement */
       }
 
       .panel-header {
@@ -622,19 +634,19 @@
         }
 
         /* Settings Panel: Left Column, Full Height */
-        .panel:nth-child(2) {
+        .config-panel {
           grid-column: 1;
           grid-row: 2 / 4;
         }
 
         /* Graph Panel: Right Column, Top Half */
-        .panel:nth-child(3) {
+        .graph-panel {
           grid-column: 2;
           grid-row: 2;
         }
 
         /* Chat Panel: Right Column, Bottom Half */
-        .panel:nth-child(4) {
+        .chat-panel {
           grid-column: 2;
           grid-row: 3;
         }
@@ -666,7 +678,7 @@
   <body>
     <div class="app-container">
       <header>
-        <div class="logo">openagent</div>
+        <div class="logo">zep-openrouter-agent</div>
         <div class="header-controls" style="display: flex; gap: 0.5rem">
           <button class="secondary" onclick="openSchemaModal()">
             Edit Schema
@@ -676,7 +688,7 @@
       </header>
 
       <!-- Panel 1: Configuration -->
-      <div class="panel">
+      <div class="panel config-panel">
         <div class="panel-header">
           <span>Configuration</span>
         </div>
@@ -944,7 +956,7 @@ Awaiting initialization...</pre
       </div>
 
       <!-- Panel 2: Graph -->
-      <div class="panel">
+      <div class="panel graph-panel">
         <div class="panel-header">
           <span>Graph</span>
           <div style="display: flex; gap: 0.5rem">
@@ -989,7 +1001,7 @@ Awaiting initialization...</pre
       </div>
 
       <!-- Panel 3: Chat -->
-      <div class="panel">
+      <div class="panel chat-panel">
         <div class="panel-header">
           <span>Chat</span>
           <span

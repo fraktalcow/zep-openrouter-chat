@@ -1,8 +1,8 @@
-# Zep Knowledge Graph + GraphRAG Chat
+# zep-openrouter-agent
 
 AI chat system combining **Zep's Knowledge Graph**, **Local GraphRAG**, and **OpenRouter's multi-model AI** for context-aware conversations with document retrieval.
 
-![OpenAgent Screenshot](assets/hyprshot.png)
+![zep-openrouter-agent Screenshot](assets/hyprshot.png)
 
 ## Technical Stack
 
@@ -47,7 +47,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Clone repository
 git clone <repo-url>
-cd openagent
+cd zep-openrouter-agent
 
 # Install dependencies
 uv sync
@@ -244,12 +244,6 @@ config = GraphRAGConfig(
 uv run python backend/server.py
 # or
 python backend/server.py
-```
-
-**Test GraphRAG**
-
-```bash
-uv run python test_graphrag.py
 ```
 
 **Custom entities** - Edit `backend/graph_config.py`:
