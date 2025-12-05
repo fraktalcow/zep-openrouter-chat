@@ -154,7 +154,7 @@ async function fetchModels() {
       const option = document.createElement("option");
       option.value = model.id;
       const isFree = model.pricing.prompt === "0";
-      option.textContent = model.name + (isFree ? " (FREE)" : "");
+      option.textContent = model.name;
       
       if (isFree) {
         freeGroup.appendChild(option);

@@ -1,5 +1,5 @@
 [project]
-name = "openagent"
+name = "zep-openrouter-chat"
 version = "0.1.0"
 description = "Zep Knowledge Graph + GraphRAG Chat with OpenRouter"
 requires-python = ">=3.10"
