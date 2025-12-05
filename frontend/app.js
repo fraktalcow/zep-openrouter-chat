@@ -36,8 +36,6 @@ document.addEventListener("DOMContentLoaded", () => {
   fetchTools();
   toggleZepSettings();
   checkLocalGraphRAGStatus();
-  // Auto-refresh graph every 5 seconds
-  setInterval(refreshGraph, 5000);
 });
 
 function toggleZepSettings() {
@@ -446,6 +444,13 @@ function selectTool(tool) {
 
 // --- GRAPH VISUALIZATION (Vis-Network) ---
 let network = null;
+let lastGraphHash = "";
+
+function hashGraphData(data) {
+  const nodeIds = (data.nodes || []).map(n => n.uuid).sort().join(",");
+  const edgeIds = (data.edges || []).map(e => `${e.source}-${e.target}`).sort().join(",");
+  return `${nodeIds}|${edgeIds}`;
+}
 
 async function refreshGraph() {
   try {
@@ -459,6 +464,12 @@ async function refreshGraph() {
     
     const res = await fetch(url);
     const data = await res.json();
+    
+    // Only update if data actually changed
+    const newHash = hashGraphData(data);
+    if (newHash === lastGraphHash) return;
+    lastGraphHash = newHash;
+    
     graphData = data;
     renderGraph();
 
@@ -519,11 +530,16 @@ function renderGraph() {
       }
     },
     physics: {
-      stabilization: false,
+      stabilization: {
+        enabled: true,
+        iterations: 100,
+        updateInterval: 25
+      },
       barnesHut: {
         gravitationalConstant: -2000,
         springConstant: 0.04,
-        springLength: 95
+        springLength: 95,
+        damping: 0.5
       }
     },
     interaction: {

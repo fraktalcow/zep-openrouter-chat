@@ -1,65 +1,63 @@
 #!/usr/bin/env python3
+import os
 import subprocess
 import sys
-import os
-import shutil
-
-def find_uv():
-    # Check PATH
-    if shutil.which("uv"):
-        return "uv"
-    
-    # Check .venv
-    venv_uv = os.path.join(os.getcwd(), ".venv", "bin", "uv")
-    if os.path.exists(venv_uv):
-        return venv_uv
-    
-    return None
-
-def ensure_uv():
-    uv = find_uv()
-    if uv:
-        return uv
-    
-    print("uv not found. Bootstrapping in .venv...")
-    venv_path = os.path.join(os.getcwd(), ".venv")
-    if not os.path.exists(venv_path):
-        subprocess.run([sys.executable, "-m", "venv", ".venv"], check=True)
-    
-    pip_path = os.path.join(venv_path, "bin", "pip")
-    subprocess.run([pip_path, "install", "uv"], check=True)
-    
-    return os.path.join(venv_path, "bin", "uv")
 
 def main():
-    print("Starting OpenAgent...")
+    # Get absolute paths
+    root_dir = os.path.abspath(os.path.dirname(__file__))
+    venv_dir = os.path.join(root_dir, ".venv")
+    venv_bin = os.path.join(venv_dir, "bin")
+    
+    # Executables
+    uv_exe = os.path.join(venv_bin, "uv")
+    uvicorn_exe = os.path.join(venv_bin, "uvicorn")
+    
+    # Prepare environment
+    # This fixes the "VIRTUAL_ENV mismatch" warning by explicitly setting it
+    env = os.environ.copy()
+    env["VIRTUAL_ENV"] = venv_dir
+    env["PATH"] = f"{venv_bin}{os.pathsep}{env.get('PATH', '')}"
+    env.pop("PYTHONHOME", None)
 
-    uv = ensure_uv()
-    print(f"Using uv: {uv}")
+    print(f"Project root: {root_dir}")
+    
+    # Check for uv
+    if not os.path.exists(uv_exe):
+        print("uv not found in .venv, bootstrapping...")
+        if not os.path.exists(venv_dir):
+            subprocess.run([sys.executable, "-m", "venv", ".venv"], check=True)
+        
+        pip_exe = os.path.join(venv_bin, "pip")
+        subprocess.run([pip_exe, "install", "uv"], check=True)
 
-    # Ensure dependencies are up to date
+    # Sync dependencies
     print("Syncing dependencies...")
     try:
-        # uv sync creates/updates the environment
-        subprocess.run([uv, "sync"], check=True)
+        subprocess.run([uv_exe, "sync"], cwd=root_dir, env=env, check=True)
     except subprocess.CalledProcessError:
-        print("Error: Failed to sync dependencies.")
+        print("Failed to sync dependencies.")
         sys.exit(1)
 
-    # Start the server
-    print("Starting backend server at http://localhost:8000...")
+    # Run server
+    print("Starting backend server...")
+    backend_dir = os.path.join(root_dir, "backend")
+    
     try:
-        # Run uvicorn using uv run
+        # Run uvicorn directly from the venv
         subprocess.run(
-            [uv, "run", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"],
-            cwd="backend",
+            [uvicorn_exe, "server:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
+            cwd=backend_dir,
+            env=env,
             check=True
         )
     except KeyboardInterrupt:
-        print("\nStopping...")
+        pass
     except subprocess.CalledProcessError as e:
-        print(f"Server crashed with error code {e.returncode}")
         sys.exit(e.returncode)
+    except FileNotFoundError:
+        print(f"Error: uvicorn not found at {uvicorn_exe}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
