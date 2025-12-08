@@ -34,7 +34,6 @@ AI chat system combining **Zep's Knowledge Graph**, **Local GraphRAG**, and **Op
 
 - 100+ models via OpenRouter
 - Free models: Llama, Gemini, Mistral, Phi-3, Qwen
-- Dynamic model search/autocomplete
 - Configurable temperature, max_tokens
 
 ## Installation
@@ -67,59 +66,6 @@ uv run python backend/server.py
 ```bash
 OPENROUTER_API_KEY=  # Get from https://openrouter.ai/keys
 ZEP_API_KEY=           # Get from https://www.getzep.com/
-
-# GraphRAG (optional)
-GRAPHRAG_ENABLED=true
-GRAPHRAG_PROFILE=balanced  # default | fast | accurate | balanced
-```
-
-**GraphRAG Profiles**
-
-- `default`: Balanced config
-- `fast`: Vector search only
-- `accurate`: All features enabled
-- `balanced`: Speed + accuracy
-
-```
-
-## Dependencies
-
-**Core**
-
-- `fastapi>=0.115.0` - Web framework
-- `uvicorn[standard]>=0.32.0` - ASGI server
-- `httpx>=0.27.0` - HTTP client
-- `python-dotenv>=1.0.0` - Environment variables
-
-**AI & ML**
-
-- `zep-cloud>=2.0.0` - Knowledge graph
-- `sentence-transformers>=2.2.0` - Embeddings
-- `torch>=2.0.0` - Deep learning
-- `rank-bm25>=0.2.2` - BM25 search
-- `numpy>=1.24.0` - Numerical computing
-- `scikit-learn>=1.3.0` - ML utilities
-- `nltk>=3.8.0` - NLP
-- `langchain-core>=0.3.0`
-- `langgraph>=0.2.0`
-
-## Development
-
-**Run server**
-
-```bash
-uv run python backend/server.py
-# or
-python backend/server.py
-```
-
-**Custom entities** - Edit `backend/graph_config.py`:
-
-```python
-CUSTOM_ENTITIES = [
-    {"name": "person", "description": "Person entity"},
-    {"name": "project", "description": "Project entity"},
-]
 ```
 
 ## Resources
