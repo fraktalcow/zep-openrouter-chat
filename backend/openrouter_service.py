@@ -207,3 +207,63 @@ class OpenRouterService:
             error_msg = str(e)
             print(f"Error generating response from OpenRouter: {error_msg}")
             return f"⚠️ Error generating response: {error_msg}"
+
+    async def generate_response_stream(
+        self,
+        prompt: str,
+        model_name: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 1024
+    ):
+        """
+        Stream a response using OpenRouter API with SSE.
+        Yields content chunks as they arrive.
+        """
+        import httpx
+        
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            messages = [
+                {"role": "system", "content": self.system_instruction},
+                {"role": "user", "content": prompt}
+            ]
+            
+            async with client.stream(
+                "POST",
+                f"{self.base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "HTTP-Referer": "https://github.com/zep-chat",
+                    "X-Title": "Zep Knowledge Graph Chat",
+                },
+                json={
+                    "model": model_name or self.model_name,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "stream": True,
+                }
+            ) as response:
+                buffer = ""
+                async for chunk in response.aiter_text():
+                    buffer += chunk
+                    while True:
+                        line_end = buffer.find('\n')
+                        if line_end == -1:
+                            break
+                        
+                        line = buffer[:line_end].strip()
+                        buffer = buffer[line_end + 1:]
+                        
+                        if line.startswith('data: '):
+                            data = line[6:]
+                            if data == '[DONE]':
+                                return
+                            
+                            try:
+                                import json
+                                data_obj = json.loads(data)
+                                content = data_obj["choices"][0]["delta"].get("content")
+                                if content:
+                                    yield content
+                            except (json.JSONDecodeError, KeyError, IndexError):
+                                pass

@@ -354,7 +354,7 @@ input[type="radio"] {
   color: var(--ctp-text);
 }
 .message.assistant::before {
-  content: "AI";
+  content: attr(data-model);
   position: absolute;
   top: -10px;
   left: 0;
