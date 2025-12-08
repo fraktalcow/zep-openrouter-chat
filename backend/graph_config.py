@@ -16,8 +16,6 @@ CUSTOM_EDGES = [
     {"name": "LIKES", "description": "User preference or affinity"},
 ]
 
-# Configurable context template that the backend uses to assemble
-# the final prompt sent to Gemini. Feel free to tweak the copy.
 DEFAULT_CONTEXT_TEMPLATE = dedent(
     """
     You are an expert agent who reasons over temporal knowledge graphs.

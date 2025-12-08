@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>zep-openrouter-agent</title>
+    <title>Zep OpenRouter Agent</title>
     <meta
       name="description"
       content="Open agent interface with tool calls and knowledge graph visualization"
@@ -141,17 +141,11 @@
         position: relative;
       }
 
-      .config-panel {
-        /* Uses default grid placement */
-      }
 
-      .graph-panel {
-        /* Uses default grid placement */
-      }
 
-      .chat-panel {
-        /* Uses default grid placement */
-      }
+
+
+
 
       .panel-header {
         padding: 0.75rem 1rem;
@@ -292,7 +286,7 @@
         transition: 0.3s;
       }
       input:checked + .slider {
-        background: var(--ctp-green);
+        background: var(--ctp-lavender);
       }
       input:checked + .slider:before {
         transform: translateX(18px);
@@ -302,7 +296,7 @@
       /* Radio buttons for graph source */
       input[type="radio"] {
         margin-right: 0.5rem;
-        accent-color: var(--ctp-green);
+        accent-color: var(--ctp-lavender);
         cursor: pointer;
       }
 
@@ -626,6 +620,92 @@
         border: 1px solid rgba(68, 71, 90, 0.3);
       }
 
+      /* --- UTILITY CLASSES --- */
+      .section-header {
+        color: var(--ctp-lavender);
+        margin-bottom: 0.5rem;
+        font-weight: 700;
+        font-size: 0.8rem;
+      }
+      .section-header.flex {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .flex { display: flex; }
+      .flex-col { flex-direction: column; }
+      .gap-sm { gap: 0.5rem; }
+      .gap-md { gap: 1rem; }
+      .flex-1 { flex: 1; }
+      .mt-sm { margin-top: 0.5rem; }
+      .mt-md { margin-top: 1rem; }
+      .mb-sm { margin-bottom: 0.5rem; }
+      .text-center { text-align: center; }
+      .text-muted { color: var(--ctp-subtext0); }
+      .full-width { width: 100%; }
+      .divider {
+        border: 0;
+        border-top: 1px dashed var(--ctp-surface0);
+        margin: 1rem 0;
+      }
+
+      /* Local GraphRAG Settings Box */
+      .settings-box {
+        margin-top: 0.75rem;
+        padding: 0.75rem;
+        background: rgba(33, 34, 44, 0.4);
+        backdrop-filter: blur(5px);
+        border-radius: 4px;
+        border: 1px solid rgba(68, 71, 90, 0.3);
+      }
+      .settings-box-label {
+        font-size: 0.75rem;
+        color: var(--ctp-subtext0);
+        margin-bottom: 0.5rem;
+      }
+      .radio-group {
+        margin-bottom: 0.75rem;
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+      }
+      .radio-label {
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+      }
+      .radio-label span {
+        margin-left: 0.5rem;
+      }
+      .status-text {
+        margin-top: 0.5rem;
+        font-size: 0.75rem;
+        color: var(--ctp-subtext0);
+      }
+      .disabled-msg {
+        display: none;
+        color: var(--ctp-surface2);
+        font-style: italic;
+        padding: 1rem;
+        text-align: center;
+      }
+      .mono-text {
+        min-height: 60px;
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+      }
+      .btn-sm {
+        padding: 0.3rem 0.6rem;
+        font-size: 0.7rem;
+      }
+      .context-stream {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        margin-top: 1rem;
+        min-height: 100px;
+      }
+
       /* --- RESPONSIVE --- */
       @media (max-width: 1280px) {
         .app-container {
@@ -678,7 +758,7 @@
   <body>
     <div class="app-container">
       <header>
-        <div class="logo">zep-openrouter-agent</div>
+        <div class="logo">Zep OpenRouter Agent</div>
         <div class="header-controls" style="display: flex; gap: 0.5rem">
           <button class="secondary" onclick="openSchemaModal()">
             Edit Schema
@@ -695,17 +775,7 @@
         <div class="panel-content">
           <!-- UNIVERSAL CHAT API SECTION -->
           <div class="config-section">
-            <div
-              class="section-header"
-              style="
-                color: var(--ctp-blue);
-                margin-bottom: 0.5rem;
-                font-weight: 700;
-                font-size: 0.8rem;
-              "
-            >
-              UNIVERSAL CHAT API
-            </div>
+            <div class="section-header">UNIVERSAL CHAT API</div>
 
             <div class="control-group">
               <label class="toggle-switch">
@@ -719,7 +789,7 @@
               <label>Model</label>
               <select id="model-select">
                 <option value="meta-llama/llama-3.2-3b-instruct:free">
-                  Loading models...
+                  Loading available models...
                 </option>
               </select>
             </div>
@@ -735,7 +805,7 @@
                   step="0.1"
                   value="0.7"
                   oninput="document.getElementById('temp-val').textContent = this.value"
-                  style="width: 100%; accent-color: var(--ctp-mauve)"
+                  style="width: 100%; accent-color: var(--ctp-lavender)"
                 />
               </div>
               <div class="input-group" style="flex: 1">
@@ -751,28 +821,11 @@
             </div>
           </div>
 
-          <hr
-            style="
-              border: 0;
-              border-top: 1px dashed var(--ctp-surface0);
-              margin: 1rem 0;
-            "
-          />
+          <hr class="divider" />
 
           <!-- GRAPH SOURCE SECTION -->
           <div class="config-section">
-            <div
-              class="section-header"
-              style="
-                color: var(--ctp-green);
-                margin-bottom: 0.5rem;
-                font-weight: 700;
-                font-size: 0.8rem;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-              "
-            >
+            <div class="section-header flex">
               <span>GRAPH SOURCE</span>
               <label class="toggle-switch" style="margin: 0">
                 <input
@@ -785,17 +838,8 @@
               </label>
             </div>
 
-            <div
-              style="
-                margin-bottom: 0.75rem;
-                display: flex;
-                gap: 1rem;
-                align-items: center;
-              "
-            >
-              <label
-                style="display: flex; align-items: center; cursor: pointer"
-              >
+            <div class="radio-group">
+              <label class="radio-label">
                 <input
                   type="radio"
                   name="graph-source"
@@ -804,11 +848,9 @@
                   checked
                   onchange="updateGraphSource()"
                 />
-                <span style="margin-left: 0.5rem">Zep (Cloud API)</span>
+                <span>Zep (Cloud API)</span>
               </label>
-              <label
-                style="display: flex; align-items: center; cursor: pointer"
-              >
+              <label class="radio-label">
                 <input
                   type="radio"
                   name="graph-source"
@@ -816,57 +858,26 @@
                   value="local"
                   onchange="updateGraphSource()"
                 />
-                <span style="margin-left: 0.5rem">Local GraphRAG</span>
+                <span>Local GraphRAG</span>
               </label>
             </div>
 
-            <div
-              id="local-graphrag-settings"
-              style="
-                display: none;
-                margin-top: 0.75rem;
-                padding: 0.75rem;
-                background: rgba(33, 34, 44, 0.4);
-                backdrop-filter: blur(5px);
-                border-radius: 4px;
-                border: 1px solid rgba(68, 71, 90, 0.3);
-              "
-            >
-              <div
-                style="
-                  font-size: 0.75rem;
-                  color: var(--ctp-subtext0);
-                  margin-bottom: 0.5rem;
-                "
-              >
+            <div id="local-graphrag-settings" class="settings-box" style="display: none">
+              <div class="settings-box-label">
                 Local GraphRAG: Process documents locally without API calls
               </div>
               <div class="input-group">
                 <label>Document Paths (one per line)</label>
                 <textarea
                   id="document-paths-input"
-                  style="
-                    min-height: 60px;
-                    font-family: var(--font-mono);
-                    font-size: 0.8rem;
-                  "
+                  class="mono-text"
                   placeholder="/path/to/doc1.md&#10;/path/to/doc2.md"
                 ></textarea>
               </div>
-              <button
-                onclick="ingestDocuments()"
-                style="width: 100%; margin-top: 0.5rem"
-              >
+              <button onclick="ingestDocuments()" class="full-width mt-sm">
                 Ingest Documents
               </button>
-              <div
-                id="local-graphrag-status"
-                style="
-                  margin-top: 0.5rem;
-                  font-size: 0.75rem;
-                  color: var(--ctp-subtext0);
-                "
-              ></div>
+              <div id="local-graphrag-status" class="status-text"></div>
             </div>
 
             <div id="zep-settings">
@@ -939,16 +950,7 @@ Awaiting initialization...</pre
               </div>
             </div>
 
-            <div
-              id="zep-disabled-msg"
-              style="
-                display: none;
-                color: var(--ctp-surface2);
-                font-style: italic;
-                padding: 1rem;
-                text-align: center;
-              "
-            >
+            <div id="zep-disabled-msg" class="disabled-msg">
               GraphRAG is disabled. Chat will be stateless.
             </div>
           </div>
@@ -959,19 +961,11 @@ Awaiting initialization...</pre
       <div class="panel graph-panel">
         <div class="panel-header">
           <span>Graph</span>
-          <div style="display: flex; gap: 0.5rem">
-            <button
-              class="secondary"
-              style="padding: 0.3rem 0.6rem; font-size: 0.7rem"
-              onclick="refreshGraph()"
-            >
+          <div class="flex gap-sm">
+            <button class="secondary btn-sm" onclick="refreshGraph()">
               Refresh
             </button>
-            <button
-              class="secondary"
-              style="padding: 0.3rem 0.6rem; font-size: 0.7rem"
-              onclick="resetZoom()"
-            >
+            <button class="secondary btn-sm" onclick="resetZoom()">
               Reset
             </button>
           </div>
@@ -987,13 +981,7 @@ Awaiting initialization...</pre
               <div class="stat-label">Nodes</div>
             </div>
             <div class="stat-item">
-              <div
-                id="edge-count"
-                class="stat-value"
-                style="color: var(--ctp-mauve)"
-              >
-                0
-              </div>
+              <div id="edge-count" class="stat-value">0</div>
               <div class="stat-label">Edges</div>
             </div>
           </div>

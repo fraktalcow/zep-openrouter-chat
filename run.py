@@ -32,7 +32,7 @@ def main():
         subprocess.run([pip_exe, "install", "uv"], check=True)
 
     # Sync dependencies
-    print("Syncing dependencies...")
+    print("Syncing dependencies with uv...")
     try:
         subprocess.run([uv_exe, "sync"], cwd=root_dir, env=env, check=True)
     except subprocess.CalledProcessError:
@@ -40,7 +40,7 @@ def main():
         sys.exit(1)
 
     # Run server
-    print("Starting backend server...")
+    print("Starting backend server (uvicorn)...")
     backend_dir = os.path.join(root_dir, "backend")
     
     try:

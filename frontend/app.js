@@ -152,7 +152,9 @@ async function fetchModels() {
       const option = document.createElement("option");
       option.value = model.id;
       const isFree = model.pricing.prompt === "0";
-      option.textContent = model.name;
+      // Clean model name - remove any existing (free) / (FREE) suffixes
+      let cleanName = model.name.replace(/\s*\(free\)\s*/gi, '').trim();
+      option.textContent = cleanName;
       
       if (isFree) {
         freeGroup.appendChild(option);
