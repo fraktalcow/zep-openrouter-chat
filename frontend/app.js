@@ -23,17 +23,14 @@ const schemaEditor = document.getElementById("schema-editor");
 // Graph source: "zep" or "local"
 let graphSource = "zep";
 
-// Tool palette state
-let availableTools = [];
-let showToolPalette = false;
-let toolPaletteFilter = "";
+
 
 // --- INITIALIZATION ---
 document.addEventListener("DOMContentLoaded", () => {
   initSession();
   fetchSchema();
   fetchModels();
-  fetchTools();
+
   toggleZepSettings();
   checkLocalGraphRAGStatus();
 });
@@ -356,93 +353,9 @@ function addMessage(role, text) {
   return div;
 }
 
-async function fetchTools() {
-  try {
-    const res = await fetch("/tools/list");
-    const data = await res.json();
-    availableTools = data.tools || [];
-  } catch (e) {
-    console.error("Failed to fetch tools", e);
-  }
-}
-
 messageInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !showToolPalette) {
-    sendMessage();
-  } else if (e.key === "Escape") {
-    hideToolPalette();
-  } else if (e.key === "ArrowDown" && showToolPalette) {
-    e.preventDefault();
-    const firstTool = document.querySelector(".tool-item");
-    if (firstTool) firstTool.focus();
-  }
+  if (e.key === "Enter") sendMessage();
 });
-
-messageInput.addEventListener("input", (e) => {
-  const value = e.target.value;
-  if (value === "/") {
-    showToolPaletteUI();
-  } else if (value.startsWith("/") && showToolPalette) {
-    toolPaletteFilter = value.slice(1).toLowerCase();
-    updateToolPalette();
-  } else if (!value.startsWith("/")) {
-    hideToolPalette();
-  }
-});
-
-function showToolPaletteUI() {
-  showToolPalette = true;
-  updateToolPalette();
-  const palette = document.getElementById("tool-palette");
-  if (palette) palette.style.display = "block";
-}
-
-function hideToolPalette() {
-  showToolPalette = false;
-  toolPaletteFilter = "";
-  const palette = document.getElementById("tool-palette");
-  if (palette) palette.style.display = "none";
-}
-
-function updateToolPalette() {
-  const palette = document.getElementById("tool-palette");
-  if (!palette) return;
-  
-  const filtered = availableTools.filter(tool => 
-    tool.name.toLowerCase().includes(toolPaletteFilter) ||
-    tool.description.toLowerCase().includes(toolPaletteFilter)
-  );
-  
-  palette.innerHTML = "";
-  
-  if (filtered.length === 0) {
-    palette.innerHTML = '<div class="tool-item-empty">No tools found</div>';
-    return;
-  }
-  
-  filtered.forEach(tool => {
-    const item = document.createElement("div");
-    item.className = "tool-item";
-    item.tabIndex = 0;
-    item.innerHTML = `
-      <div class="tool-name">/${tool.name}</div>
-      <div class="tool-description">${tool.description}</div>
-    `;
-    item.addEventListener("click", () => selectTool(tool));
-    item.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        selectTool(tool);
-      }
-    });
-    palette.appendChild(item);
-  });
-}
-
-function selectTool(tool) {
-  messageInput.value = `/${tool.name} `;
-  hideToolPalette();
-  messageInput.focus();
-}
 
 // --- GRAPH VISUALIZATION (Vis-Network) ---
 let network = null;
@@ -571,9 +484,5 @@ function resetZoom() {
 
 window.addEventListener("resize", () => {
   if (network) network.fit();
-});
-
-window.addEventListener("resize", () => {
-  if (graphData.nodes.length > 0) renderGraph();
 });
 

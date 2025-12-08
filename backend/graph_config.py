@@ -1,20 +1,5 @@
-# Configuration for Custom Entity and Edge Types
-# Refer to: https://help.getzep.com/cookbook/advanced-context-block-construction
-
+# Context template for Zep graph
 from textwrap import dedent
-
-# Domain specific metadata leveraged by the Zep graph.
-CUSTOM_ENTITIES = [
-    {"name": "Project", "description": "A software project or initiative"},
-    {"name": "Technology", "description": "A language, framework, tool, or API"},
-    {"name": "Preference", "description": "A persistent user preference or trait"},
-]
-
-CUSTOM_EDGES = [
-    {"name": "USES", "description": "Project makes use of a technology"},
-    {"name": "DEVELOPED_BY", "description": "Project created or owned by a person"},
-    {"name": "LIKES", "description": "User preference or affinity"},
-]
 
 DEFAULT_CONTEXT_TEMPLATE = dedent(
     """

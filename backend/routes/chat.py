@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-import re
 
 from graph_config import DEFAULT_CONTEXT_TEMPLATE
 from openrouter_service import OpenRouterService
@@ -15,16 +14,14 @@ class ChatRequest(BaseModel):
     use_memory: bool = True
     use_retrieval: bool = True
     use_ai: bool = True
-    use_ai: bool = True
     model_name: str = "meta-llama/llama-3.2-3b-instruct:free"
     context_message_limit: int = Field(default=6, ge=2, le=20)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1024, ge=1, le=100000)
 
 
-# These will be injected by server.py
+# Injected by server.py
 zep_service: ZepService = None
-openrouter_service: OpenRouterService = None
 openrouter_service: OpenRouterService = None
 SESSIONS: dict = None
 
