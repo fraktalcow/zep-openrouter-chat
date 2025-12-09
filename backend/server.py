@@ -4,7 +4,6 @@ from typing import Any, Dict
 from dotenv import load_dotenv
 import uvicorn
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from openrouter_service import OpenRouterService
