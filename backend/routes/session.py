@@ -49,13 +49,16 @@ async def create_session(request: SessionRequest):
         "business_data": request.business_data,
     }
 
-    await zep_service.create_session(
-        user_id,
-        session_id,
-        first_name=request.first_name,
-        last_name=request.last_name,
-        metadata=metadata,
-    )
+    try:
+        await zep_service.create_session(
+            user_id,
+            session_id,
+            first_name=request.first_name,
+            last_name=request.last_name,
+            metadata=metadata,
+        )
+    except Exception as e:
+        print(f"Warning: Failed to create Zep Cloud session: {e}. Proceeding with local session.")
 
     SESSIONS[session_id] = {
         "user_id": user_id,

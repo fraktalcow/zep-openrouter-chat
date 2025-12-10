@@ -268,10 +268,18 @@ async function sendMessage() {
   const sendButton = document.getElementById("send-btn");
   if (sendButton) sendButton.disabled = true;
 
+  // Get display name for the model
+  const selectEl = document.getElementById("model-select");
+  const modelDisplayName = selectEl.options[selectEl.selectedIndex] ? selectEl.options[selectEl.selectedIndex].text : "AI";
+
+  let loadingMsgEl = null;
+
   try {
     // Show Loading Animation
-    const loadingMsgEl = document.createElement("div");
+    // Show Loading Animation
+    loadingMsgEl = document.createElement("div");
     loadingMsgEl.className = "message assistant loading";
+    loadingMsgEl.setAttribute("data-model", modelDisplayName);
     loadingMsgEl.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
     chatBox.appendChild(loadingMsgEl);
     chatBox.scrollTop = chatBox.scrollHeight;
@@ -280,8 +288,7 @@ async function sendMessage() {
     let contextBlockData = null;
     let res;
 
-    try {
-      res = await fetch("/chat", {
+    res = await fetch("/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -296,14 +303,8 @@ async function sendMessage() {
           max_tokens: parseInt(document.getElementById("max-tokens-input").value),
         }),
       });
-    } finally {
-      if (loadingMsgEl && loadingMsgEl.parentNode) {
-        loadingMsgEl.remove();
-      }
-    }
 
-    // Create assistant message element for streaming
-    const assistantMsgEl = addMessage("assistant", "");
+    let assistantMsgEl = null;
 
     if (!res.ok) {
       throw new Error(`HTTP error! status: ${res.status}`);
@@ -367,6 +368,11 @@ async function sendMessage() {
                 contextBlock.textContent = contextBlockData.rendered;
               }
             } else if (data.type === "content" && data.chunk) {
+              if (!assistantMsgEl) {
+                if (loadingMsgEl && loadingMsgEl.parentNode) loadingMsgEl.remove();
+                assistantMsgEl = addMessage("assistant", "", modelDisplayName);
+              }
+
               // Append chunk to response
               fullResponse += data.chunk;
               // Update message element with full response so far
@@ -377,6 +383,10 @@ async function sendMessage() {
               }
               chatBox.scrollTop = chatBox.scrollHeight;
             } else if (data.type === "done") {
+              if (!assistantMsgEl) {
+                 if (loadingMsgEl && loadingMsgEl.parentNode) loadingMsgEl.remove();
+                 assistantMsgEl = addMessage("assistant", "", modelDisplayName);
+              }
               // Finalize response
               fullResponse = data.response || fullResponse;
               if (typeof marked !== 'undefined') {
@@ -404,6 +414,11 @@ async function sendMessage() {
           try {
             const data = JSON.parse(dataStr);
             if (data.type === "content" && data.chunk) {
+              if (!assistantMsgEl) {
+                if (loadingMsgEl && loadingMsgEl.parentNode) loadingMsgEl.remove();
+                assistantMsgEl = addMessage("assistant", "", modelDisplayName);
+              }
+
               fullResponse += data.chunk;
               if (typeof marked !== 'undefined') {
                 assistantMsgEl.innerHTML = marked.parse(fullResponse);
@@ -411,6 +426,11 @@ async function sendMessage() {
                 assistantMsgEl.textContent = fullResponse;
               }
             } else if (data.type === "done") {
+              if (!assistantMsgEl) {
+                 if (loadingMsgEl && loadingMsgEl.parentNode) loadingMsgEl.remove();
+                 assistantMsgEl = addMessage("assistant", "", modelDisplayName);
+              }
+
               fullResponse = data.response || fullResponse;
               if (typeof marked !== 'undefined') {
                 assistantMsgEl.innerHTML = marked.parse(fullResponse);
@@ -429,6 +449,8 @@ async function sendMessage() {
     refreshGraph();
 
   } catch (e) {
+    if (loadingMsgEl && loadingMsgEl.parentNode) loadingMsgEl.remove();
+
     if (e.message.includes("Rate limit")) {
       addMessage("system", "⚠️ Rate limit exceeded. Please wait a moment or switch to a free model.");
     } else {
@@ -443,9 +465,12 @@ async function sendMessage() {
   }
 }
 
-function addMessage(role, text) {
+function addMessage(role, text, modelName = null) {
   const div = document.createElement("div");
   div.className = `message ${role}`;
+  if (role === "assistant" && modelName) {
+    div.setAttribute("data-model", modelName);
+  }
   
   if (typeof marked !== 'undefined') {
     div.innerHTML = marked.parse(text);
