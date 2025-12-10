@@ -27,9 +27,14 @@ let graphSource = "zep";
 
 // --- INITIALIZATION ---
 document.addEventListener("DOMContentLoaded", () => {
-  initSession();
-  fetchSchema();
-  fetchModels();
+  // Run initialization tasks in parallel for faster startup
+  Promise.all([
+    initSession(),
+    fetchSchema(),
+    fetchModels(),
+  ]).catch(err => {
+    console.error("Initialization error:", err);
+  });
 
   toggleZepSettings();
   checkLocalGraphRAGStatus();
@@ -251,88 +256,175 @@ async function sendMessage() {
   const userMsgEl = addMessage("user", text);
   messageInput.value = "";
 
-        const useAi = document.getElementById("ai-toggle").checked;
-        const useZep = document.getElementById("zep-toggle").checked;
-        const useMemory = document.getElementById("memory-toggle").checked;
-        const useRetrieval = document.getElementById("retrieval-toggle").checked;
-        const useLocalGraphRAG = graphSource === "local";
-        const modelName = document.getElementById("model-select").value;
+  const useAi = document.getElementById("ai-toggle").checked;
+  const useZep = document.getElementById("zep-toggle").checked;
+  const useMemory = document.getElementById("memory-toggle").checked;
+  const useRetrieval = document.getElementById("retrieval-toggle").checked;
+  const useLocalGraphRAG = graphSource === "local";
+  const modelName = document.getElementById("model-select").value;
 
-        try {
-          const res = await fetch("/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              session_id: sessionId,
-              message: text,
-              use_memory: useMemory && useZep && !useLocalGraphRAG,
-              use_retrieval: useRetrieval && useZep && !useLocalGraphRAG,
-              use_ai: useAi,
-              use_local_graphrag: useLocalGraphRAG,
-              model_name: modelName,
-              temperature: parseFloat(document.getElementById("temp-input").value),
-              max_tokens: parseInt(document.getElementById("max-tokens-input").value),
-            }),
-          });
+  // Disable input while processing
+  messageInput.disabled = true;
+  const sendButton = document.getElementById("send-btn");
+  if (sendButton) sendButton.disabled = true;
 
-          const data = await res.json();
+  try {
+    // Create assistant message element for streaming
+    const assistantMsgEl = addMessage("assistant", "");
+    let fullResponse = "";
+    let contextBlockData = null;
 
-          // Handle tool results
-          if (data.is_tool) {
-            addMessage("assistant", data.response, true);
-            hideToolPalette();
-            refreshGraph();
-            return;
-          }
+    const res = await fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: sessionId,
+        message: text,
+        use_memory: useMemory && useZep && !useLocalGraphRAG,
+        use_retrieval: useRetrieval && useZep && !useLocalGraphRAG,
+        use_ai: useAi,
+        use_local_graphrag: useLocalGraphRAG,
+        model_name: modelName,
+        temperature: parseFloat(document.getElementById("temp-input").value),
+        max_tokens: parseInt(document.getElementById("max-tokens-input").value),
+      }),
+    });
 
-          if (
-            data.context_block &&
-            data.context_block.sections &&
-            data.context_block.sections.graph_facts &&
-            data.context_block.sections.graph_facts.length > 0
-          ) {
-            const factsDiv = document.createElement("div");
-            factsDiv.className = "retrieved-facts";
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
+    // Handle streaming response
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      
+      // Process complete SSE messages (lines ending with \n\n)
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        
+        // Parse SSE format: "data: {...}"
+        if (line.startsWith("data: ")) {
+          const dataStr = line.slice(6); // Remove "data: " prefix
+          try {
+            const data = JSON.parse(dataStr);
             
-            const factsHeader = document.createElement("div");
-            factsHeader.innerHTML = "<strong>Retrieved Context</strong>";
-            factsDiv.appendChild(factsHeader);
+            if (data.type === "context") {
+              contextBlockData = data.context_block;
+              
+              // Show retrieved facts if available
+              if (
+                contextBlockData &&
+                contextBlockData.sections &&
+                contextBlockData.sections.graph_facts &&
+                contextBlockData.sections.graph_facts.length > 0
+              ) {
+                const factsDiv = document.createElement("div");
+                factsDiv.className = "retrieved-facts";
+                
+                const factsHeader = document.createElement("div");
+                factsHeader.innerHTML = "<strong>Retrieved Context</strong>";
+                factsDiv.appendChild(factsHeader);
 
-            const factsList = document.createElement("ul");
-            data.context_block.sections.graph_facts.forEach((fact) => {
-              const li = document.createElement("li");
-              li.textContent = fact;
-              factsList.appendChild(li);
-            });
+                const factsList = document.createElement("ul");
+                contextBlockData.sections.graph_facts.forEach((fact) => {
+                  const li = document.createElement("li");
+                  li.textContent = fact;
+                  factsList.appendChild(li);
+                });
 
-            factsDiv.appendChild(factsList);
-            userMsgEl.appendChild(factsDiv);
-            chatBox.scrollTop = chatBox.scrollHeight;
+                factsDiv.appendChild(factsList);
+                userMsgEl.appendChild(factsDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+              }
+
+              // Update context block display
+              if (contextBlockData && contextBlockData.rendered) {
+                contextBlock.textContent = contextBlockData.rendered;
+              }
+            } else if (data.type === "content" && data.chunk) {
+              // Append chunk to response
+              fullResponse += data.chunk;
+              // Update message element with full response so far
+              if (typeof marked !== 'undefined') {
+                assistantMsgEl.innerHTML = marked.parse(fullResponse);
+              } else {
+                assistantMsgEl.textContent = fullResponse;
+              }
+              chatBox.scrollTop = chatBox.scrollHeight;
+            } else if (data.type === "done") {
+              // Finalize response
+              fullResponse = data.response || fullResponse;
+              if (typeof marked !== 'undefined') {
+                assistantMsgEl.innerHTML = marked.parse(fullResponse);
+              } else {
+                assistantMsgEl.textContent = fullResponse;
+              }
+              chatBox.scrollTop = chatBox.scrollHeight;
+            } else if (data.type === "error") {
+              throw new Error(data.error || "Unknown error");
+            }
+          } catch (e) {
+            console.error("Error parsing SSE data:", e, "Data:", dataStr);
           }
+        }
+      }
+    }
 
-          addMessage("assistant", data.response);
-
-          if (data.context_block && data.context_block.rendered) {
-            contextBlock.textContent = data.context_block.rendered;
+    // Process any remaining buffer
+    if (buffer.trim()) {
+      const lines = buffer.split("\n\n");
+      for (const line of lines) {
+        if (line.trim() && line.startsWith("data: ")) {
+          const dataStr = line.slice(6);
+          try {
+            const data = JSON.parse(dataStr);
+            if (data.type === "content" && data.chunk) {
+              fullResponse += data.chunk;
+              if (typeof marked !== 'undefined') {
+                assistantMsgEl.innerHTML = marked.parse(fullResponse);
+              } else {
+                assistantMsgEl.textContent = fullResponse;
+              }
+            } else if (data.type === "done") {
+              fullResponse = data.response || fullResponse;
+              if (typeof marked !== 'undefined') {
+                assistantMsgEl.innerHTML = marked.parse(fullResponse);
+              } else {
+                assistantMsgEl.textContent = fullResponse;
+              }
+            }
+          } catch (e) {
+            console.error("Error parsing final SSE data:", e);
           }
+        }
+      }
+    }
 
-          // Always refresh graph after message (works for both Zep and local)
-          refreshGraph();
-          
-          // If local GraphRAG returned graph data, use it
-          if (data.graph_data) {
-            graphData = data.graph_data;
-            renderGraph();
-            document.getElementById("node-count").textContent = data.graph_data.nodes?.length || 0;
-            document.getElementById("edge-count").textContent = data.graph_data.edges?.length || 0;
-          }
+    // Always refresh graph after message (works for both Zep and local)
+    refreshGraph();
+
   } catch (e) {
     if (e.message.includes("Rate limit")) {
-       addMessage("system", "⚠️ Rate limit exceeded. Please wait a moment or switch to a free model.");
+      addMessage("system", "⚠️ Rate limit exceeded. Please wait a moment or switch to a free model.");
     } else {
-       addMessage("system", "Error: Connection failed. " + e.message);
+      addMessage("system", "Error: Connection failed. " + e.message);
     }
     console.error(e);
+  } finally {
+    // Re-enable input
+    messageInput.disabled = false;
+    if (sendButton) sendButton.disabled = false;
+    messageInput.focus();
   }
 }
 

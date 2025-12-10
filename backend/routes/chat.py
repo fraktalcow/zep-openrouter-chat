@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+import json
 
 from graph_config import DEFAULT_CONTEXT_TEMPLATE
 from openrouter_service import OpenRouterService
@@ -33,19 +35,24 @@ def init_services(zep: ZepService, openrouter: OpenRouterService, sessions: dict
     SESSIONS = sessions
 
 
-@router.post("")
-async def chat(request: ChatRequest):
-    # Zep-based flow
+async def _stream_chat_response(request: ChatRequest):
+    """
+    Internal generator for streaming chat responses.
+    Yields SSE-formatted data chunks.
+    """
     session_meta = SESSIONS.get(request.session_id)
     if not session_meta:
-        raise HTTPException(status_code=404, detail="Unknown session. Create one first.")
+        yield f"data: {json.dumps({'error': 'Unknown session. Create one first.'})}\n\n"
+        return
 
+    # Add user message to memory
     if request.use_memory or request.use_retrieval:
         await zep_service.add_memory(request.session_id, "user", request.message)
 
     context_sections = {"memory_section": "", "graph_section": ""}
     prompt = request.message
 
+    # Build context block
     if request.use_memory or request.use_retrieval:
         context_sections = await zep_service.build_context_block(
             session_id=request.session_id,
@@ -67,29 +74,53 @@ async def chat(request: ChatRequest):
             query=request.message,
         )
 
+    # Send context block info first
+    yield f"data: {json.dumps({'type': 'context', 'context_block': {'rendered': prompt, 'sections': context_sections, 'template': DEFAULT_CONTEXT_TEMPLATE, 'use_memory': request.use_memory, 'use_retrieval': request.use_retrieval}})}\n\n"
+
+    # Stream AI response if enabled
     if request.use_ai:
-        response_text = await openrouter_service.generate_response(
-            prompt,
-            model_name=request.model_name,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens
-        )
+        full_response = ""
+        try:
+            async for chunk in openrouter_service.generate_response_stream(
+                prompt,
+                model_name=request.model_name,
+                temperature=request.temperature,
+                max_tokens=request.max_tokens
+            ):
+                full_response += chunk
+                # Send content chunk as SSE
+                yield f"data: {json.dumps({'type': 'content', 'chunk': chunk})}\n\n"
+            
+            # Save full response to memory
+            if request.use_memory or request.use_retrieval:
+                await zep_service.add_memory(request.session_id, "assistant", full_response)
+            
+            # Send completion signal
+            yield f"data: {json.dumps({'type': 'done', 'response': full_response})}\n\n"
+        except Exception as e:
+            error_msg = str(e)
+            yield f"data: {json.dumps({'type': 'error', 'error': error_msg})}\n\n"
     else:
         response_text = "AI API is disabled. Context block generated."
+        yield f"data: {json.dumps({'type': 'content', 'chunk': response_text})}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'response': response_text})}\n\n"
 
-    if request.use_memory or request.use_retrieval:
-        await zep_service.add_memory(request.session_id, "assistant", response_text)
 
-    return {
-        "response": response_text,
-        "context_block": {
-            "rendered": prompt,
-            "sections": context_sections,
-            "template": DEFAULT_CONTEXT_TEMPLATE,
-            "use_memory": request.use_memory,
-            "use_retrieval": request.use_retrieval,
-        },
-    }
+@router.post("")
+async def chat(request: ChatRequest):
+    """
+    Chat endpoint with streaming support.
+    Returns Server-Sent Events (SSE) stream for real-time response.
+    """
+    return StreamingResponse(
+        _stream_chat_response(request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        }
+    )
 
 
 

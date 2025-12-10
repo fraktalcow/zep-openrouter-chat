@@ -218,52 +218,123 @@ class OpenRouterService:
         """
         Stream a response using OpenRouter API with SSE.
         Yields content chunks as they arrive.
-        """
-        import httpx
         
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            messages = [
-                {"role": "system", "content": self.system_instruction},
-                {"role": "user", "content": prompt}
-            ]
-            
-            async with client.stream(
-                "POST",
-                f"{self.base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "HTTP-Referer": "https://github.com/zep-chat",
-                    "X-Title": "Zep Knowledge Graph Chat",
-                },
-                json={
-                    "model": model_name or self.model_name,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                    "stream": True,
-                }
-            ) as response:
-                buffer = ""
-                async for chunk in response.aiter_text():
-                    buffer += chunk
-                    while True:
-                        line_end = buffer.find('\n')
-                        if line_end == -1:
-                            break
+        Yields:
+            str: Content chunks from the streaming response
+        """
+        import json
+        
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                messages = [
+                    {"role": "system", "content": self.system_instruction},
+                    {"role": "user", "content": prompt}
+                ]
+                
+                async with client.stream(
+                    "POST",
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "HTTP-Referer": "https://github.com/zep-chat",
+                        "X-Title": "Zep Knowledge Graph Chat",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model_name or self.model_name,
+                        "messages": messages,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                        "stream": True,
+                    }
+                ) as response:
+                    response.raise_for_status()
+                    
+                    # Read raw bytes to avoid any text decoding buffering
+                    buffer = b""
+                    async for chunk_bytes in response.aiter_bytes():
+                        if not chunk_bytes:
+                            continue
                         
-                        line = buffer[:line_end].strip()
-                        buffer = buffer[line_end + 1:]
+                        buffer += chunk_bytes
                         
-                        if line.startswith('data: '):
-                            data = line[6:]
-                            if data == '[DONE]':
-                                return
+                        # Process complete SSE lines (ending with \n)
+                        while b'\n' in buffer:
+                            line_end = buffer.find(b'\n')
+                            line_bytes = buffer[:line_end]
+                            buffer = buffer[line_end + 1:]
+                            
+                            if not line_bytes.strip():
+                                continue
                             
                             try:
-                                import json
-                                data_obj = json.loads(data)
-                                content = data_obj["choices"][0]["delta"].get("content")
-                                if content:
-                                    yield content
-                            except (json.JSONDecodeError, KeyError, IndexError):
-                                pass
+                                line = line_bytes.decode('utf-8').strip()
+                                
+                                # Handle SSE format: "data: {...}" or "data: [DONE]"
+                                if line.startswith('data: '):
+                                    data_str = line[6:]  # Remove "data: " prefix
+                                    
+                                    if data_str == '[DONE]':
+                                        return
+                                    
+                                    try:
+                                        data_obj = json.loads(data_str)
+                                        # Handle OpenAI-compatible streaming format
+                                        if "choices" in data_obj and len(data_obj["choices"]) > 0:
+                                            delta = data_obj["choices"][0].get("delta", {})
+                                            content = delta.get("content")
+                                            if content:
+                                                # Yield immediately - this is real streaming data from OpenRouter
+                                                yield content
+                                    except (json.JSONDecodeError, KeyError, IndexError):
+                                        # Skip malformed chunks, continue streaming
+                                        continue
+                            except UnicodeDecodeError:
+                                # Skip invalid UTF-8, continue with next chunk
+                                continue
+                    
+                    # Process any remaining buffer content
+                    if buffer.strip():
+                        try:
+                            remaining = buffer.decode('utf-8').strip()
+                            if remaining.startswith('data: '):
+                                data_str = remaining[6:]
+                                if data_str != '[DONE]':
+                                    try:
+                                        data_obj = json.loads(data_str)
+                                        if "choices" in data_obj and len(data_obj["choices"]) > 0:
+                                            delta = data_obj["choices"][0].get("delta", {})
+                                            content = delta.get("content")
+                                            if content:
+                                                yield content
+                                    except (json.JSONDecodeError, KeyError, IndexError):
+                                        pass
+                        except UnicodeDecodeError:
+                            pass
+                                    
+        except httpx.HTTPStatusError as e:
+            error_msg = str(e)
+            print(f"HTTP Error from OpenRouter streaming: {error_msg}")
+            
+            if e.response.status_code == 429:
+                error_msg = "⚠️ Error: Rate limit exceeded. Please try again in a moment."
+            elif e.response.status_code == 402:
+                error_msg = "⚠️ Error: Insufficient credits. Please check your OpenRouter account."
+            elif e.response.status_code == 401:
+                error_msg = "⚠️ Error: Invalid API key. Please check your OPENROUTER_API_KEY."
+            else:
+                error_msg = f"⚠️ HTTP Error {e.response.status_code}: {error_msg}"
+            
+            raise Exception(error_msg)
+            
+        except httpx.TimeoutException:
+            error_msg = "⚠️ Error: Request timed out. Please try again."
+            print(f"Timeout from OpenRouter streaming: {error_msg}")
+            raise Exception(error_msg)
+            
+        except Exception as e:
+            error_msg = str(e)
+            print(f"Error in OpenRouter streaming: {error_msg}")
+            if not error_msg.startswith("⚠️"):
+                error_msg = f"⚠️ Error generating response: {error_msg}"
+            raise Exception(error_msg)
