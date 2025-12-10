@@ -11,6 +11,12 @@ def main():
     
     # Executables
     uv_exe = os.path.join(venv_bin, "uv")
+    if not os.path.exists(uv_exe):
+        import shutil
+        system_uv = shutil.which("uv")
+        if system_uv:
+            uv_exe = system_uv
+
     uvicorn_exe = os.path.join(venv_bin, "uvicorn")
     
     # Prepare environment
@@ -24,12 +30,17 @@ def main():
     
     # Check for uv
     if not os.path.exists(uv_exe):
-        print("uv not found in .venv, bootstrapping...")
+        print("uv not found in .venv or system, bootstrapping...")
         if not os.path.exists(venv_dir):
             subprocess.run([sys.executable, "-m", "venv", ".venv"], check=True)
         
         pip_exe = os.path.join(venv_bin, "pip")
-        subprocess.run([pip_exe, "install", "uv"], check=True)
+        if os.path.exists(pip_exe):
+             subprocess.run([pip_exe, "install", "uv"], check=True)
+        else:
+             print("Error: pip not found in .venv and uv not installed on system.")
+             print("Please install uv manually: curling -LsSf https://astral.sh/uv/install.sh | sh")
+             sys.exit(1)
 
     # Sync dependencies
     print("Syncing dependencies with uv...")
