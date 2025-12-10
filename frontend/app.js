@@ -269,26 +269,41 @@ async function sendMessage() {
   if (sendButton) sendButton.disabled = true;
 
   try {
-    // Create assistant message element for streaming
-    const assistantMsgEl = addMessage("assistant", "");
+    // Show Loading Animation
+    const loadingMsgEl = document.createElement("div");
+    loadingMsgEl.className = "message assistant loading";
+    loadingMsgEl.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+    chatBox.appendChild(loadingMsgEl);
+    chatBox.scrollTop = chatBox.scrollHeight;
+
     let fullResponse = "";
     let contextBlockData = null;
+    let res;
 
-    const res = await fetch("/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        session_id: sessionId,
-        message: text,
-        use_memory: useMemory && useZep && !useLocalGraphRAG,
-        use_retrieval: useRetrieval && useZep && !useLocalGraphRAG,
-        use_ai: useAi,
-        use_local_graphrag: useLocalGraphRAG,
-        model_name: modelName,
-        temperature: parseFloat(document.getElementById("temp-input").value),
-        max_tokens: parseInt(document.getElementById("max-tokens-input").value),
-      }),
-    });
+    try {
+      res = await fetch("/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          message: text,
+          use_memory: useMemory && useZep && !useLocalGraphRAG,
+          use_retrieval: useRetrieval && useZep && !useLocalGraphRAG,
+          use_ai: useAi,
+          use_local_graphrag: useLocalGraphRAG,
+          model_name: modelName,
+          temperature: parseFloat(document.getElementById("temp-input").value),
+          max_tokens: parseInt(document.getElementById("max-tokens-input").value),
+        }),
+      });
+    } finally {
+      if (loadingMsgEl && loadingMsgEl.parentNode) {
+        loadingMsgEl.remove();
+      }
+    }
+
+    // Create assistant message element for streaming
+    const assistantMsgEl = addMessage("assistant", "");
 
     if (!res.ok) {
       throw new Error(`HTTP error! status: ${res.status}`);
