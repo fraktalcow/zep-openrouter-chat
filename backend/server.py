@@ -72,11 +72,8 @@ app.include_router(api_router)
 
 @app.on_event("startup")
 async def startup_event():
-    try:
-        schema = load_schema()
-        await zep_service.ensure_ontology(schema["entities"], schema["edges"])
-    except Exception as e:
-        print(f"Warning: Failed to initialize Zep ontology (Zep Cloud might be disabled/unreachable): {e}")
+    schema = load_schema()
+    await zep_service.ensure_ontology(schema["entities"], schema["edges"])
 
 if __name__ == "__main__":
 

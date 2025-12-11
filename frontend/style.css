@@ -310,10 +310,18 @@ input[type="radio"] {
   line-height: 1.6;
   position: relative;
   animation: fadeIn 0.3s ease;
-  min-width: 120px; /* Ensure bubble isn't too small */
 }
 
-/* ... existing keyframes ... */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
 /* User Message: Aligned Right, Lavender accent */
 .message.user {
@@ -327,11 +335,12 @@ input[type="radio"] {
 .message.user::before {
   content: "You";
   position: absolute;
-  top: -18px;
+  top: -10px;
   right: 0;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: var(--ctp-lavender);
-  background: transparent;
+  background: rgba(40, 42, 54, 0.8);
+  backdrop-filter: blur(5px);
   padding: 0 4px;
 }
 
@@ -343,21 +352,17 @@ input[type="radio"] {
   border: 1px solid rgba(69, 71, 90, 0.3);
   border-radius: 8px 8px 8px 0;
   color: var(--ctp-text);
-  margin-top: 10px; /* Give space for the label */
 }
 .message.assistant::before {
   content: attr(data-model);
   position: absolute;
-  top: -22px;
+  top: -10px;
   left: 0;
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   color: var(--ctp-green);
-  background: transparent;
+  background: rgba(40, 42, 54, 0.8);
+  backdrop-filter: blur(5px);
   padding: 0 4px;
-  white-space: nowrap;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .message strong {

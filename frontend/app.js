@@ -263,23 +263,26 @@ async function sendMessage() {
   const useLocalGraphRAG = graphSource === "local";
   const modelName = document.getElementById("model-select").value;
 
+  // Update Active Model Display
+  const modelDisplay = document.getElementById("active-model-display");
+  const select = document.getElementById("model-select");
+  if (modelDisplay && select && select.selectedOptions.length > 0) {
+      const selectedOption = select.selectedOptions[0];
+      modelDisplay.textContent = `Using: ${selectedOption.textContent}`;
+      modelDisplay.title = selectedOption.textContent;
+  }
+
   // Disable input while processing
   messageInput.disabled = true;
   const sendButton = document.getElementById("send-btn");
   if (sendButton) sendButton.disabled = true;
 
-  // Get display name for the model
-  const selectEl = document.getElementById("model-select");
-  const modelDisplayName = selectEl.options[selectEl.selectedIndex] ? selectEl.options[selectEl.selectedIndex].text : "AI";
-
   let loadingMsgEl = null;
 
   try {
     // Show Loading Animation
-    // Show Loading Animation
     loadingMsgEl = document.createElement("div");
     loadingMsgEl.className = "message assistant loading";
-    loadingMsgEl.setAttribute("data-model", modelDisplayName);
     loadingMsgEl.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
     chatBox.appendChild(loadingMsgEl);
     chatBox.scrollTop = chatBox.scrollHeight;
@@ -370,7 +373,7 @@ async function sendMessage() {
             } else if (data.type === "content" && data.chunk) {
               if (!assistantMsgEl) {
                 if (loadingMsgEl && loadingMsgEl.parentNode) loadingMsgEl.remove();
-                assistantMsgEl = addMessage("assistant", "", modelDisplayName);
+                assistantMsgEl = addMessage("assistant", "");
               }
 
               // Append chunk to response
@@ -385,7 +388,7 @@ async function sendMessage() {
             } else if (data.type === "done") {
               if (!assistantMsgEl) {
                  if (loadingMsgEl && loadingMsgEl.parentNode) loadingMsgEl.remove();
-                 assistantMsgEl = addMessage("assistant", "", modelDisplayName);
+                 assistantMsgEl = addMessage("assistant", "");
               }
               // Finalize response
               fullResponse = data.response || fullResponse;
@@ -416,7 +419,7 @@ async function sendMessage() {
             if (data.type === "content" && data.chunk) {
               if (!assistantMsgEl) {
                 if (loadingMsgEl && loadingMsgEl.parentNode) loadingMsgEl.remove();
-                assistantMsgEl = addMessage("assistant", "", modelDisplayName);
+                assistantMsgEl = addMessage("assistant", "");
               }
 
               fullResponse += data.chunk;
@@ -428,7 +431,7 @@ async function sendMessage() {
             } else if (data.type === "done") {
               if (!assistantMsgEl) {
                  if (loadingMsgEl && loadingMsgEl.parentNode) loadingMsgEl.remove();
-                 assistantMsgEl = addMessage("assistant", "", modelDisplayName);
+                 assistantMsgEl = addMessage("assistant", "");
               }
 
               fullResponse = data.response || fullResponse;
@@ -465,12 +468,9 @@ async function sendMessage() {
   }
 }
 
-function addMessage(role, text, modelName = null) {
+function addMessage(role, text) {
   const div = document.createElement("div");
   div.className = `message ${role}`;
-  if (role === "assistant" && modelName) {
-    div.setAttribute("data-model", modelName);
-  }
   
   if (typeof marked !== 'undefined') {
     div.innerHTML = marked.parse(text);

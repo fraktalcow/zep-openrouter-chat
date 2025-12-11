@@ -81,15 +81,16 @@ async def _stream_chat_response(request: ChatRequest):
     if request.use_ai:
         full_response = ""
         try:
-            async for chunk in openrouter_service.generate_response_stream(
+            # Non-streaming call (to avoid OpenRouter streaming 429s)
+            full_response = await openrouter_service.generate_response(
                 prompt,
                 model_name=request.model_name,
                 temperature=request.temperature,
                 max_tokens=request.max_tokens
-            ):
-                full_response += chunk
-                # Send content chunk as SSE
-                yield f"data: {json.dumps({'type': 'content', 'chunk': chunk})}\n\n"
+            )
+
+            # Send content chunk as SSE (one big chunk)
+            yield f"data: {json.dumps({'type': 'content', 'chunk': full_response})}\n\n"
             
             # Save full response to memory
             if request.use_memory or request.use_retrieval:
