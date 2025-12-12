@@ -261,15 +261,20 @@ async function sendMessage() {
   const useMemory = document.getElementById("memory-toggle").checked;
   const useRetrieval = document.getElementById("retrieval-toggle").checked;
   const useLocalGraphRAG = graphSource === "local";
-  const modelName = document.getElementById("model-select").value;
+  const modelId = document.getElementById("model-select").value;
+  
+  // Get display name for model
+  const select = document.getElementById("model-select");
+  let modelDisplayName = modelId;
+  if (select.selectedOptions.length > 0) {
+      modelDisplayName = select.selectedOptions[0].textContent;
+  }
 
   // Update Active Model Display
   const modelDisplay = document.getElementById("active-model-display");
-  const select = document.getElementById("model-select");
-  if (modelDisplay && select && select.selectedOptions.length > 0) {
-      const selectedOption = select.selectedOptions[0];
-      modelDisplay.textContent = `Using: ${selectedOption.textContent}`;
-      modelDisplay.title = selectedOption.textContent;
+  if (modelDisplay) {
+      modelDisplay.textContent = `Using: ${modelDisplayName}`;
+      modelDisplay.title = modelDisplayName;
   }
 
   // Disable input while processing
@@ -278,12 +283,22 @@ async function sendMessage() {
   if (sendButton) sendButton.disabled = true;
 
   let loadingMsgEl = null;
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), 60000); // 60s timeout
 
   try {
-    // Show Loading Animation
+    // Show Loading Animation with Model Name
     loadingMsgEl = document.createElement("div");
     loadingMsgEl.className = "message assistant loading";
-    loadingMsgEl.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+    if (modelDisplayName) {
+        loadingMsgEl.setAttribute("data-model", modelDisplayName);
+    }
+    
+    // Add a status text next to typing indicator
+    loadingMsgEl.innerHTML = `
+        <div class="typing-indicator"><span></span><span></span><span></span></div>
+        <span style="font-size: 0.75rem; color: var(--ctp-surface2); margin-left: 10px;">Waiting for response...</span>
+    `;
     chatBox.appendChild(loadingMsgEl);
     chatBox.scrollTop = chatBox.scrollHeight;
 
@@ -301,11 +316,14 @@ async function sendMessage() {
           use_retrieval: useRetrieval && useZep && !useLocalGraphRAG,
           use_ai: useAi,
           use_local_graphrag: useLocalGraphRAG,
-          model_name: modelName,
+          model_name: modelId,
           temperature: parseFloat(document.getElementById("temp-input").value),
           max_tokens: parseInt(document.getElementById("max-tokens-input").value),
         }),
+        signal: abortController.signal
       });
+
+    clearTimeout(timeoutId);
 
     let assistantMsgEl = null;
 
@@ -373,7 +391,7 @@ async function sendMessage() {
             } else if (data.type === "content" && data.chunk) {
               if (!assistantMsgEl) {
                 if (loadingMsgEl && loadingMsgEl.parentNode) loadingMsgEl.remove();
-                assistantMsgEl = addMessage("assistant", "");
+                assistantMsgEl = addMessage("assistant", "", modelDisplayName);
               }
 
               // Append chunk to response
@@ -388,7 +406,7 @@ async function sendMessage() {
             } else if (data.type === "done") {
               if (!assistantMsgEl) {
                  if (loadingMsgEl && loadingMsgEl.parentNode) loadingMsgEl.remove();
-                 assistantMsgEl = addMessage("assistant", "");
+                 assistantMsgEl = addMessage("assistant", "", modelDisplayName);
               }
               // Finalize response
               fullResponse = data.response || fullResponse;
@@ -419,7 +437,7 @@ async function sendMessage() {
             if (data.type === "content" && data.chunk) {
               if (!assistantMsgEl) {
                 if (loadingMsgEl && loadingMsgEl.parentNode) loadingMsgEl.remove();
-                assistantMsgEl = addMessage("assistant", "");
+                assistantMsgEl = addMessage("assistant", "", modelDisplayName);
               }
 
               fullResponse += data.chunk;
@@ -431,7 +449,7 @@ async function sendMessage() {
             } else if (data.type === "done") {
               if (!assistantMsgEl) {
                  if (loadingMsgEl && loadingMsgEl.parentNode) loadingMsgEl.remove();
-                 assistantMsgEl = addMessage("assistant", "");
+                 assistantMsgEl = addMessage("assistant", "", modelDisplayName);
               }
 
               fullResponse = data.response || fullResponse;
@@ -454,13 +472,16 @@ async function sendMessage() {
   } catch (e) {
     if (loadingMsgEl && loadingMsgEl.parentNode) loadingMsgEl.remove();
 
-    if (e.message.includes("Rate limit")) {
+    if (e.name === 'AbortError') {
+         addMessage("system", "⚠️ Request timed out. The model took too long to respond.");
+    } else if (e.message.includes("Rate limit") || (e.message.includes("429"))) {
       addMessage("system", "⚠️ Rate limit exceeded. Please wait a moment or switch to a free model.");
     } else {
-      addMessage("system", "Error: Connection failed. " + e.message);
+      addMessage("system", `Error: ${e.message}`);
     }
     console.error(e);
   } finally {
+    clearTimeout(timeoutId);
     // Re-enable input
     messageInput.disabled = false;
     if (sendButton) sendButton.disabled = false;
@@ -468,9 +489,13 @@ async function sendMessage() {
   }
 }
 
-function addMessage(role, text) {
+function addMessage(role, text, modelName = null) {
   const div = document.createElement("div");
   div.className = `message ${role}`;
+  
+  if (role === 'assistant' && modelName) {
+      div.setAttribute('data-model', modelName);
+  }
   
   if (typeof marked !== 'undefined') {
     div.innerHTML = marked.parse(text);
