@@ -283,6 +283,7 @@ async function sendMessage() {
   if (sendButton) sendButton.disabled = true;
 
   let loadingMsgEl = null;
+  let loadingInterval = null;
   const abortController = new AbortController();
   const timeoutId = setTimeout(() => abortController.abort(), 60000); // 60s timeout
 
@@ -297,10 +298,29 @@ async function sendMessage() {
     // Add a status text next to typing indicator
     loadingMsgEl.innerHTML = `
         <div class="typing-indicator"><span></span><span></span><span></span></div>
-        <span style="font-size: 0.75rem; color: var(--ctp-surface2); margin-left: 10px;">Waiting for response...</span>
+        <span class="loading-status" style="font-size: 0.75rem; color: var(--ctp-surface2); margin-left: 10px;">Waiting for response...</span>
     `;
     chatBox.appendChild(loadingMsgEl);
     chatBox.scrollTop = chatBox.scrollHeight;
+
+    // Start timer to update loading status
+    const startTime = Date.now();
+    loadingInterval = setInterval(() => {
+        if (loadingMsgEl && loadingMsgEl.parentNode) {
+            const statusSpan = loadingMsgEl.querySelector(".loading-status");
+            if (statusSpan) {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                if (elapsed > 0) {
+                    statusSpan.textContent = `Waiting for response... (${elapsed}s)`;
+                    // Change color after 5 seconds to indicate it's taking a while
+                    if (elapsed > 5) statusSpan.style.color = "var(--ctp-lavender)";
+                    if (elapsed > 15) statusSpan.style.color = "var(--ctp-peach)";
+                }
+            }
+        } else {
+            clearInterval(loadingInterval);
+        }
+    }, 1000);
 
     let fullResponse = "";
     let contextBlockData = null;
@@ -482,6 +502,7 @@ async function sendMessage() {
     console.error(e);
   } finally {
     clearTimeout(timeoutId);
+    if (loadingInterval) clearInterval(loadingInterval);
     // Re-enable input
     messageInput.disabled = false;
     if (sendButton) sendButton.disabled = false;
