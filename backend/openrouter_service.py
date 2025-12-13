@@ -198,7 +198,8 @@ class OpenRouterService:
             elif e.response.status_code == 401:
                 return "⚠️ Error: Invalid API key. Please check your OPENROUTER_API_KEY."
             else:
-                return f"⚠️ HTTP Error {e.response.status_code}: {error_msg}"
+                error_details = e.response.text
+                return f"⚠️ HTTP Error {e.response.status_code}: {error_msg}\nDetails: {error_details}"
                 
         except httpx.TimeoutException:
             return "⚠️ Error: Request timed out. Please try again."
