@@ -138,7 +138,11 @@
               </label>
             </div>
 
-            <div id="local-graphrag-settings" class="settings-box" style="display: none">
+            <div
+              id="local-graphrag-settings"
+              class="settings-box"
+              style="display: none"
+            >
               <div class="settings-box-label">
                 Local GraphRAG: Process documents locally without API calls
               </div>
@@ -170,20 +174,29 @@
 
               <div class="input-group">
                 <label>Traits</label>
-                <textarea id="traits-input" style="min-height: 40px" placeholder="e.g. Curious, detail oriented."></textarea
-                >
+                <textarea
+                  id="traits-input"
+                  style="min-height: 40px"
+                  placeholder="e.g. Curious, detail oriented."
+                ></textarea>
               </div>
 
               <div class="input-group">
                 <label>Preferences</label>
-                <textarea id="preferences-input" style="min-height: 40px" placeholder="e.g. Enjoys structured, actionable answers."></textarea
-                >
+                <textarea
+                  id="preferences-input"
+                  style="min-height: 40px"
+                  placeholder="e.g. Enjoys structured, actionable answers."
+                ></textarea>
               </div>
 
               <div class="input-group">
                 <label>Business Data</label>
-                <textarea id="business-data-input" style="min-height: 40px" placeholder="Add business context here"></textarea
-                >
+                <textarea
+                  id="business-data-input"
+                  style="min-height: 40px"
+                  placeholder="Add business context here"
+                ></textarea>
               </div>
 
               <div style="margin-top: 0.5rem">
@@ -265,7 +278,19 @@ Awaiting initialization...</pre
       <div class="panel chat-panel">
         <div class="panel-header">
           <span>Chat</span>
-          <span id="active-model-display" style="font-size: 0.7rem; color: var(--ctp-subtext0); margin-left: auto; margin-right: 1rem; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></span>
+          <span
+            id="active-model-display"
+            style="
+              font-size: 0.7rem;
+              color: var(--ctp-subtext0);
+              margin-left: auto;
+              margin-right: 1rem;
+              max-width: 200px;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            "
+          ></span>
           <span
             id="session-badge"
             style="color: var(--ctp-green); font-size: 0.75rem"
@@ -339,6 +364,6 @@ Awaiting initialization...</pre
       </div>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script type="module" src="/static/js/main.js"></script>
   </body>
 </html>
