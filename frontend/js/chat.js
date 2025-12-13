@@ -1,61 +1,56 @@
 
 import * as API from './api.js';
 import * as UI from './ui.js';
-import { refreshGraph } from './main.js'; // Circular dependency? Better to pass callback or event.
+import { refreshGraph } from './main.js';
 
 export async function sendMessage(state) {
     const input = document.getElementById("message-input");
-    const text = input.value.trim();
+    const text = input?.value?.trim();
     if (!text || !state.sessionId) return;
 
     // UI Updates
-    const userMsgEl = UI.addMessage("user", text);
+    UI.addMessage("user", text);
     input.value = "";
-    
-    // Lock UI
     input.disabled = true;
+    
     const sendBtn = document.getElementById("send-btn");
-    if(sendBtn) sendBtn.disabled = true;
+    if (sendBtn) sendBtn.disabled = true;
 
-    // Get Settings
-    const useAi = document.getElementById("ai-toggle").checked;
+    // Get settings
+    const useAi = document.getElementById("ai-toggle")?.checked ?? true;
+    const useRag = document.getElementById("rag-toggle")?.checked ?? false;
     const modelSelect = document.getElementById("model-select");
-    const modelId = modelSelect.value;
-    const modelName = modelSelect.selectedOptions[0]?.textContent || modelId;
+    const modelId = modelSelect?.value || "meta-llama/llama-3.2-3b-instruct:free";
+    const modelName = modelSelect?.selectedOptions[0]?.textContent || modelId;
 
-    // Helper for local graph
-    const isLocal = state.graphSource === "local";
-
-    // Show Loading
+    // Show loading
     let loadingMsgEl = UI.createLoadingMessage(modelName);
     const startTime = Date.now();
     const loadingInterval = setInterval(() => {
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        UI.updateLoadingStatus(loadingMsgEl, `Waiting for response... (${elapsed}s)`, elapsed > 5 ? "var(--ctp-peach)" : null);
+        UI.updateLoadingStatus(loadingMsgEl, `Waiting... (${elapsed}s)`, elapsed > 5 ? "var(--ctp-peach)" : null);
     }, 1000);
 
     const abortController = new AbortController();
-    const timeoutId = setTimeout(() => abortController.abort(), 60000);
+    setTimeout(() => abortController.abort(), 60000);
 
     try {
         const payload = {
             session_id: state.sessionId,
             message: text,
-            use_memory: document.getElementById("memory-toggle").checked && !isLocal,
-            use_retrieval: document.getElementById("retrieval-toggle").checked && !isLocal,
+            use_memory: document.getElementById("memory-toggle")?.checked ?? true,
+            use_retrieval: document.getElementById("retrieval-toggle")?.checked ?? true,
+            use_rag: useRag,
             use_ai: useAi,
-            use_local_graphrag: isLocal,
             model_name: modelId,
-            temperature: parseFloat(document.getElementById("temp-input").value),
-            max_tokens: parseInt(document.getElementById("max-tokens-input").value),
+            temperature: parseFloat(document.getElementById("temp-input")?.value || "0.7"),
+            max_tokens: parseInt(document.getElementById("max-tokens-input")?.value || "1024"),
         };
 
         const res = await API.fetchChatStream(payload, abortController.signal);
-        clearTimeout(timeoutId);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-
-        // Stream Handling
+        // Stream handling
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -76,22 +71,16 @@ export async function sendMessage(state) {
                 try {
                     const data = JSON.parse(line.slice(6));
                     
-                    if (data.type === "context") {
-                        UI.displayContextBlock(data.context_block);
-                        if (data.context_block?.sections?.graph_facts) {
-                            UI.displayRetrievedFacts(userMsgEl, data.context_block.sections.graph_facts);
-                        }
-                    } else if (data.type === "content" && data.chunk) {
+                    if (data.type === "content" && data.chunk) {
                         if (!assistantMsgEl) {
                             loadingMsgEl.remove();
                             assistantMsgEl = UI.addMessage("assistant", "", modelName);
                         }
                         fullResponse += data.chunk;
-                        // Use marked if available, else plain text
                         assistantMsgEl.innerHTML = typeof marked !== 'undefined' ? marked.parse(fullResponse) : fullResponse;
                         UI.scrollToBottom();
                     } else if (data.type === "done") {
-                         if (!assistantMsgEl) {
+                        if (!assistantMsgEl) {
                             loadingMsgEl.remove();
                             assistantMsgEl = UI.addMessage("assistant", "", modelName);
                         }
@@ -102,24 +91,22 @@ export async function sendMessage(state) {
                         throw new Error(data.error);
                     }
                 } catch (e) {
-                    console.error("SSE Parse Error", e);
+                    if (e.message !== "error") console.error("SSE parse error", e);
                 }
             }
         }
         
-        // Refresh graph at end of turn
         refreshGraph();
 
     } catch (e) {
-        if (loadingMsgEl && loadingMsgEl.parentNode) loadingMsgEl.remove();
+        if (loadingMsgEl?.parentNode) loadingMsgEl.remove();
         let errorText = `Error: ${e.message}`;
         if (e.name === 'AbortError') errorText = "⚠️ Request timed out.";
-        if (e.message.includes("429")) errorText = "⚠️ Rate limit exceeded.";
         UI.addMessage("system", errorText);
     } finally {
         clearInterval(loadingInterval);
         input.disabled = false;
-        if(sendBtn) sendBtn.disabled = false;
-        input.focus();
+        if (sendBtn) sendBtn.disabled = false;
+        input?.focus();
     }
 }

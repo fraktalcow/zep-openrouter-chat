@@ -1,6 +1,17 @@
 from typing import Optional, List, Dict, Any
 import httpx
+import math
 from datetime import datetime, timedelta
+
+
+def cosine_similarity(a: List[float], b: List[float]) -> float:
+    """Calculate cosine similarity between two vectors."""
+    dot = sum(x * y for x, y in zip(a, b))
+    mag_a = math.sqrt(sum(x * x for x in a))
+    mag_b = math.sqrt(sum(x * x for x in b))
+    if mag_a == 0 or mag_b == 0:
+        return 0.0
+    return dot / (mag_a * mag_b)
 
 
 class OpenRouterService:
@@ -134,6 +145,45 @@ class OpenRouterService:
             )
         
         return filtered[:limit]
+    
+    async def fetch_embedding_models(self) -> List[Dict[str, Any]]:
+        """
+        Fetch models that support embeddings from OpenRouter.
+        Filters models with 'embeddings' in their supported modalities.
+        """
+        all_models = await self.fetch_all_models()
+        
+        # Filter for embedding models
+        embedding_models = []
+        for model in all_models:
+            arch = model.get("architecture", {})
+            modality = arch.get("modality", "")
+            # Check if model supports embeddings
+            if "embedding" in model["id"].lower() or "embed" in modality.lower():
+                embedding_models.append({
+                    "id": model["id"],
+                    "name": model["name"],
+                    "description": model.get("description", ""),
+                    "pricing": model.get("pricing", {}),
+                })
+        
+        # Add known embedding models that might not be filtered
+        known_embeddings = [
+            "openai/text-embedding-3-small",
+            "openai/text-embedding-3-large", 
+            "openai/text-embedding-ada-002",
+        ]
+        existing_ids = {m["id"] for m in embedding_models}
+        for known in known_embeddings:
+            if known not in existing_ids:
+                embedding_models.append({
+                    "id": known,
+                    "name": known.split("/")[-1],
+                    "description": "OpenAI embedding model",
+                    "pricing": {},
+                })
+        
+        return embedding_models
     
     async def generate_response(
         self, 
@@ -339,3 +389,133 @@ class OpenRouterService:
             if not error_msg.startswith("⚠️"):
                 error_msg = f"⚠️ Error generating response: {error_msg}"
             raise Exception(error_msg)
+
+    # ==================== EMBEDDINGS API ====================
+    
+    async def generate_embeddings(
+        self,
+        texts: List[str],
+        model: str = "openai/text-embedding-3-small"
+    ) -> List[List[float]]:
+        """
+        Generate embeddings using OpenRouter's embeddings API.
+        
+        Args:
+            texts: List of texts to embed
+            model: Embedding model to use
+            
+        Returns:
+            List of embedding vectors
+        """
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/embeddings",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "HTTP-Referer": "https://github.com/zep-chat",
+                        "X-Title": "Zep Knowledge Graph Chat",
+                    },
+                    json={
+                        "model": model,
+                        "input": texts,
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                # Extract embeddings in order
+                embeddings = [None] * len(texts)
+                for item in data.get("data", []):
+                    idx = item.get("index", 0)
+                    embeddings[idx] = item.get("embedding", [])
+                
+                return embeddings
+                
+        except httpx.HTTPStatusError as e:
+            print(f"Embeddings API error: {e.response.status_code} - {e.response.text}")
+            raise
+        except Exception as e:
+            print(f"Embeddings error: {e}")
+            raise
+
+    # ==================== RAG STORE ====================
+    # Simple in-memory vector store for document RAG
+    
+    _rag_documents: List[Dict[str, Any]] = []
+    _rag_embeddings: List[List[float]] = []
+    
+    async def add_documents(
+        self,
+        documents: List[Dict[str, Any]],
+        embedding_model: str = "openai/text-embedding-3-small"
+    ) -> Dict[str, Any]:
+        """
+        Add documents to the RAG store.
+        
+        Args:
+            documents: List of {"text": str, "metadata": dict} objects
+            embedding_model: Model for generating embeddings
+            
+        Returns:
+            Status with count of added documents
+        """
+        texts = [doc["text"] for doc in documents]
+        embeddings = await self.generate_embeddings(texts, embedding_model)
+        
+        for doc, emb in zip(documents, embeddings):
+            self._rag_documents.append({
+                "text": doc["text"],
+                "metadata": doc.get("metadata", {}),
+            })
+            self._rag_embeddings.append(emb)
+        
+        return {"added": len(documents), "total": len(self._rag_documents)}
+    
+    async def search(
+        self,
+        query: str,
+        top_k: int = 5,
+        embedding_model: str = "openai/text-embedding-3-small"
+    ) -> List[Dict[str, Any]]:
+        """
+        Search for relevant documents using semantic similarity.
+        
+        Args:
+            query: Search query
+            top_k: Number of results to return
+            embedding_model: Model for generating query embedding
+            
+        Returns:
+            List of documents with similarity scores
+        """
+        if not self._rag_documents:
+            return []
+        
+        # Get query embedding
+        query_emb = (await self.generate_embeddings([query], embedding_model))[0]
+        
+        # Calculate similarities
+        results = []
+        for i, (doc, emb) in enumerate(zip(self._rag_documents, self._rag_embeddings)):
+            score = cosine_similarity(query_emb, emb)
+            results.append({
+                "text": doc["text"],
+                "metadata": doc["metadata"],
+                "score": score,
+            })
+        
+        # Sort by score descending
+        results.sort(key=lambda x: x["score"], reverse=True)
+        return results[:top_k]
+    
+    def clear_documents(self) -> Dict[str, Any]:
+        """Clear all documents from RAG store."""
+        count = len(self._rag_documents)
+        self._rag_documents = []
+        self._rag_embeddings = []
+        return {"cleared": count}
+    
+    def get_document_count(self) -> int:
+        """Get number of documents in RAG store."""
+        return len(self._rag_documents)

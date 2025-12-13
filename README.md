@@ -1,28 +1,33 @@
 # zep-openrouter-agent
 
-Lightweight AI chat with **Zep Knowledge Graph** and **OpenRouter's multi-model AI** for context-aware conversations.
+Lightweight AI chat with **Zep Knowledge Graph** and **OpenRouter AI** for context-aware conversations.
 
 ![zep-openrouter-agent Screenshot](assets/hyprshot.png)
 
-## Technical Stack
-
-- **Backend**: FastAPI, Python 3.10+
-- **Memory/RAG**: Zep Cloud (handles embeddings + graph-based memory)
-- **AI Models**: OpenRouter API (100+ models)
-
 ## Features
 
-**Knowledge Graph**
+**Zep Memory** - Persistent graph-based memory via Zep Cloud
 
-- Persistent graph-based memory via Zep
 - User preferences, traits, conversation history
-- Semantic search and retrieval (handled by Zep's cloud embeddings)
+- Semantic search and retrieval
 
-**AI Integration**
+**RAG (OpenRouter)** - Document ingestion using OpenRouter embeddings
 
-- 100+ models via OpenRouter
+- Multiple embedding models available (text-embedding-3-small, etc.)
+- In-memory vector store with cosine similarity search
+- Toggleable in UI
+
+**AI Models** - 100+ models via OpenRouter
+
 - Free models: Llama, Gemini, Mistral, Phi-3, Qwen
 - Configurable temperature, max_tokens
+
+## Stack
+
+- **Backend**: FastAPI, Python 3.10+
+- **Memory**: Zep Cloud
+- **Embeddings**: OpenRouter API
+- **AI**: OpenRouter API
 
 ## Installation
 
@@ -30,18 +35,16 @@ Lightweight AI chat with **Zep Knowledge Graph** and **OpenRouter's multi-model 
 # Install UV
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Clone repository
+# Clone & install
 git clone <repo-url>
 cd zep-openrouter-agent
-
-# Install dependencies
 uv sync
 
-# Configure environment
+# Configure
 cp backend/.env.example backend/.env
-# Edit backend/.env with your API keys
+# Edit backend/.env with API keys
 
-# Run server
+# Run
 uv run python backend/server.py
 ```
 
@@ -50,13 +53,25 @@ uv run python backend/server.py
 **backend/.env**
 
 ```bash
-OPENROUTER_API_KEY=  # Get from https://openrouter.ai/keys
-ZEP_API_KEY=         # Get from https://www.getzep.com/
+OPENROUTER_API_KEY=  # https://openrouter.ai/keys
+ZEP_API_KEY=         # https://www.getzep.com/
 ```
+
+## API Endpoints
+
+| Endpoint           | Description               |
+| ------------------ | ------------------------- |
+| `POST /chat`       | Chat with AI (SSE stream) |
+| `POST /session`    | Create session            |
+| `GET /models/all`  | List AI models            |
+| `GET /rag/models`  | List embedding models     |
+| `POST /rag/models` | Set embedding model       |
+| `POST /rag/ingest` | Ingest document           |
+| `POST /rag/search` | Search RAG store          |
+| `GET /rag/stats`   | RAG statistics            |
 
 ## Resources
 
-- [UV Documentation](https://docs.astral.sh/uv/)
 - [OpenRouter API](https://openrouter.ai/docs)
+- [OpenRouter Embeddings](https://openrouter.ai/docs/api/reference/embeddings)
 - [Zep Documentation](https://help.getzep.com/)
-- [FastAPI](https://fastapi.tiangolo.com/)

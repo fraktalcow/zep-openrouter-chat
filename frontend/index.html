@@ -100,64 +100,18 @@
 
           <hr class="divider" />
 
-          <!-- GRAPH SOURCE SECTION -->
+          <!-- GRAPH SOURCE & RAG SECTION -->
           <div class="config-section">
             <div class="section-header flex">
-              <span>GRAPH SOURCE</span>
+              <span>Zep Memory</span>
               <label class="toggle-switch" style="margin: 0">
                 <input
                   type="checkbox"
                   id="zep-toggle"
-                  onchange="toggleZepSettings()"
+                  checked
                 />
                 <span class="slider"></span>
               </label>
-            </div>
-
-            <div class="radio-group">
-              <label class="radio-label">
-                <input
-                  type="radio"
-                  name="graph-source"
-                  id="graph-source-zep"
-                  value="zep"
-                  checked
-                  onchange="updateGraphSource()"
-                />
-                <span>Zep (Cloud API)</span>
-              </label>
-              <label class="radio-label">
-                <input
-                  type="radio"
-                  name="graph-source"
-                  id="graph-source-local"
-                  value="local"
-                  onchange="updateGraphSource()"
-                />
-                <span>Local GraphRAG</span>
-              </label>
-            </div>
-
-            <div
-              id="local-graphrag-settings"
-              class="settings-box"
-              style="display: none"
-            >
-              <div class="settings-box-label">
-                Local GraphRAG: Process documents locally without API calls
-              </div>
-              <div class="input-group">
-                <label>Document Paths (one per line)</label>
-                <textarea
-                  id="document-paths-input"
-                  class="mono-text"
-                  placeholder="/path/to/doc1.md&#10;/path/to/doc2.md"
-                ></textarea>
-              </div>
-              <button onclick="ingestDocuments()" class="full-width mt-sm">
-                Ingest Documents
-              </button>
-              <div id="local-graphrag-status" class="status-text"></div>
             </div>
 
             <div id="zep-settings">
@@ -212,32 +166,53 @@
                   <label class="toggle-switch">
                     <input type="checkbox" id="retrieval-toggle" checked />
                     <span class="slider"></span>
-                    <span>RAG</span>
+                    <span>Graph</span>
                   </label>
                 </div>
               </div>
-
-              <div
-                style="
-                  flex: 1;
-                  display: flex;
-                  flex-direction: column;
-                  margin-top: 1rem;
-                  min-height: 100px;
-                "
-              >
-                <label style="margin-bottom: 0.5rem">Live Context Stream</label>
-                <pre
-                  id="context-block"
-                  style="max-height: 150px; overflow-y: auto"
-                >
-Awaiting initialization...</pre
-                >
-              </div>
             </div>
 
-            <div id="zep-disabled-msg" class="disabled-msg">
-              GraphRAG is disabled. Chat will be stateless.
+            <div id="zep-disabled-msg" class="disabled-msg" style="display: none">
+              Zep memory disabled. Chat will use RAG only.
+            </div>
+          </div>
+
+          <hr class="divider" />
+
+          <!-- RAG SECTION (OpenRouter Embeddings) -->
+          <div class="config-section">
+            <div class="section-header flex">
+              <span>RAG (OpenRouter)</span>
+              <label class="toggle-switch" style="margin: 0">
+                <input type="checkbox" id="rag-toggle" />
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div id="rag-settings" style="display: none">
+              <div class="input-group">
+                <label>Embedding Model</label>
+                <select id="embedding-model-select">
+                  <option value="openai/text-embedding-3-small">text-embedding-3-small</option>
+                </select>
+              </div>
+
+              <div class="input-group">
+                <label>Document Text</label>
+                <textarea
+                  id="document-text-input"
+                  class="mono-text"
+                  style="min-height: 60px"
+                  placeholder="Paste document text to ingest..."
+                ></textarea>
+              </div>
+
+              <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem">
+                <button id="ingest-btn" class="full-width">Ingest</button>
+                <button id="clear-rag-btn" class="secondary">Clear</button>
+              </div>
+
+              <div id="rag-status" class="status-text" style="margin-top: 0.5rem"></div>
             </div>
           </div>
         </div>
