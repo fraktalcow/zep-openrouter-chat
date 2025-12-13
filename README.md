@@ -1,18 +1,14 @@
 # zep-openrouter-agent
 
-AI chat system combining **Zep's Knowledge Graph**, **Local GraphRAG**, and **OpenRouter's multi-model AI** for context-aware conversations with document retrieval.
+Lightweight AI chat with **Zep Knowledge Graph** and **OpenRouter's multi-model AI** for context-aware conversations.
 
 ![zep-openrouter-agent Screenshot](assets/hyprshot.png)
 
 ## Technical Stack
 
 - **Backend**: FastAPI, Python 3.10+
-- **Knowledge Graph**: Zep Cloud (graph-based memory)
-- **GraphRAG**: Local document retrieval with BM25 + vector search
-- **Embeddings**: sentence-transformers (MiniLM, MPNet, BGE)
+- **Memory/RAG**: Zep Cloud (handles embeddings + graph-based memory)
 - **AI Models**: OpenRouter API (100+ models)
-- **Search**: Hybrid (BM25Okapi + cosine similarity)
-- **Compute**: CUDA/CPU support for embeddings
 
 ## Features
 
@@ -20,15 +16,7 @@ AI chat system combining **Zep's Knowledge Graph**, **Local GraphRAG**, and **Op
 
 - Persistent graph-based memory via Zep
 - User preferences, traits, conversation history
-- Adaptive graph generation
-
-**GraphRAG**
-
-- Document ingestion with chunking strategies (fixed, semantic, sentence, paragraph)
-- Hybrid search (BM25 + vector similarity)
-- Configurable algorithms: vector, BM25, hybrid, graph traversal
-- GPU-accelerated embeddings
-- Reranking support
+- Semantic search and retrieval (handled by Zep's cloud embeddings)
 
 **AI Integration**
 
@@ -37,8 +25,6 @@ AI chat system combining **Zep's Knowledge Graph**, **Local GraphRAG**, and **Op
 - Configurable temperature, max_tokens
 
 ## Installation
-
-### Using UV (Recommended)
 
 ```bash
 # Install UV
@@ -65,7 +51,7 @@ uv run python backend/server.py
 
 ```bash
 OPENROUTER_API_KEY=  # Get from https://openrouter.ai/keys
-ZEP_API_KEY=           # Get from https://www.getzep.com/
+ZEP_API_KEY=         # Get from https://www.getzep.com/
 ```
 
 ## Resources
