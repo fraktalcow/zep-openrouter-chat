@@ -1,7 +1,7 @@
 
 import * as API from './api.js';
 import * as UI from './ui.js';
-import { refreshGraph } from './main.js';
+import { refreshGraph, scheduleGraphRefresh } from './main.js';
 
 export async function sendMessage(state) {
     const input = document.getElementById("message-input");
@@ -96,7 +96,8 @@ export async function sendMessage(state) {
             }
         }
         
-        refreshGraph();
+        // Zep processes graph asynchronously - poll for updates
+        scheduleGraphRefresh();
 
     } catch (e) {
         if (loadingMsgEl?.parentNode) loadingMsgEl.remove();

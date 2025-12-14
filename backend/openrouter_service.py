@@ -247,6 +247,8 @@ class OpenRouterService:
                 return "⚠️ Error: Insufficient credits. Please check your OpenRouter account."
             elif e.response.status_code == 401:
                 return "⚠️ Error: Invalid API key. Please check your OPENROUTER_API_KEY."
+            elif e.response.status_code == 404:
+                return "⚠️ Error: No endpoints matching your data policy for this model. Try a different model."
             else:
                 error_details = e.response.text
                 return f"⚠️ HTTP Error {e.response.status_code}: {error_msg}\nDetails: {error_details}"
@@ -373,6 +375,8 @@ class OpenRouterService:
                 error_msg = "⚠️ Error: Insufficient credits. Please check your OpenRouter account."
             elif e.response.status_code == 401:
                 error_msg = "⚠️ Error: Invalid API key. Please check your OPENROUTER_API_KEY."
+            elif e.response.status_code == 404:
+                error_msg = "⚠️ Error: No endpoints matching your data policy for this model. Try a different model."
             else:
                 error_msg = f"⚠️ HTTP Error {e.response.status_code}: {error_msg}"
             

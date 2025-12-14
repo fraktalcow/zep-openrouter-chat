@@ -98,8 +98,32 @@ export async function refreshGraph() {
 
         document.getElementById("node-count").textContent = data.nodes?.length || 0;
         document.getElementById("edge-count").textContent = data.edges?.length || 0;
+        
+        return { nodes: data.nodes?.length || 0, edges: data.edges?.length || 0 };
     } catch (e) {
         console.error("Graph refresh failed", e);
+        return { nodes: 0, edges: 0 };
+    }
+}
+
+/**
+ * Schedule multiple graph refreshes to catch Zep's async graph processing.
+ * Zep extracts entities and builds the knowledge graph asynchronously after
+ * messages are added, so we need to poll for updates.
+ */
+export async function scheduleGraphRefresh() {
+    const delays = [500, 2000, 5000]; // Poll at 0.5s, 2s, 5s
+    let lastCounts = await refreshGraph();
+    
+    for (const delay of delays) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        const counts = await refreshGraph();
+        
+        // If graph changed, log it
+        if (counts.nodes !== lastCounts.nodes || counts.edges !== lastCounts.edges) {
+            console.log(`Graph updated: ${counts.nodes} nodes, ${counts.edges} edges`);
+        }
+        lastCounts = counts;
     }
 }
 
