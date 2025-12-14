@@ -2,13 +2,41 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import json
+from textwrap import dedent
 
-from graph_config import DEFAULT_CONTEXT_TEMPLATE
 from openrouter_service import OpenRouterService
 from zep_service import ZepService
 from routes.rag import get_embedding_model
 
 router = APIRouter()
+
+
+DEFAULT_CONTEXT_TEMPLATE = dedent(
+    """
+    You are an expert agent who reasons over temporal knowledge graphs.
+    Stay concise, personal, and cite the user's preferences when helpful.
+
+    # Session
+    - Session ID: {session_id}
+    - User: {user_name}
+
+    # User Signals
+    • Preferences: {preferences}
+    • Traits: {traits}
+    • Business Data: {business_data}
+
+    # Conversation Memory
+    {memory_section}
+
+    # Knowledge Graph Retrieval
+    {graph_section}
+
+    # Latest Query
+    {query}
+
+    Compose a thoughtful assistant reply grounded in the context above.
+    """
+).strip()
 
 
 class ChatRequest(BaseModel):
