@@ -1,8 +1,26 @@
+/**
+ * Chat Module
+ * Handles message sending, streaming responses, and SSE parsing.
+ */
 
 import * as API from './api.js';
 import * as UI from './ui.js';
-import { refreshGraph, scheduleGraphRefresh } from './main.js';
+import { CONFIG, COLORS } from './config.js';
+import { scheduleGraphRefresh } from './main.js';
 
+/**
+ * Parse markdown if marked library is available.
+ * @param {string} text - Raw text to parse
+ * @returns {string} HTML string
+ */
+const parseMarkdown = (text) => 
+    typeof marked !== 'undefined' ? marked.parse(text) : text;
+
+/**
+ * Send a chat message and stream the response.
+ * @param {{sessionId: string, userId: string}} state - Current session state
+ * @returns {Promise<void>}
+ */
 export async function sendMessage(state) {
     const input = document.getElementById("message-input");
     const text = input?.value?.trim();
@@ -20,7 +38,7 @@ export async function sendMessage(state) {
     const useAi = document.getElementById("ai-toggle")?.checked ?? true;
     const useRag = document.getElementById("rag-toggle")?.checked ?? false;
     const modelSelect = document.getElementById("model-select");
-    const modelId = modelSelect?.value || "meta-llama/llama-3.2-3b-instruct:free";
+    const modelId = modelSelect?.value || CONFIG.FALLBACK_MODEL;
     const modelName = modelSelect?.selectedOptions[0]?.textContent || modelId;
 
     // Show loading
@@ -28,11 +46,12 @@ export async function sendMessage(state) {
     const startTime = Date.now();
     const loadingInterval = setInterval(() => {
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        UI.updateLoadingStatus(loadingMsgEl, `Waiting... (${elapsed}s)`, elapsed > 5 ? "var(--ctp-peach)" : null);
+        const color = elapsed > CONFIG.LOADING_WARNING_THRESHOLD_S ? COLORS.peach : null;
+        UI.updateLoadingStatus(loadingMsgEl, `Waiting... (${elapsed}s)`, color);
     }, 1000);
 
     const abortController = new AbortController();
-    setTimeout(() => abortController.abort(), 60000);
+    setTimeout(() => abortController.abort(), CONFIG.REQUEST_TIMEOUT_MS);
 
     try {
         const payload = {
@@ -43,8 +62,8 @@ export async function sendMessage(state) {
             use_rag: useRag,
             use_ai: useAi,
             model_name: modelId,
-            temperature: parseFloat(document.getElementById("temp-input")?.value || "0.7"),
-            max_tokens: parseInt(document.getElementById("max-tokens-input")?.value || "1024"),
+            temperature: parseFloat(document.getElementById("temp-input")?.value || String(CONFIG.DEFAULT_TEMPERATURE)),
+            max_tokens: parseInt(document.getElementById("max-tokens-input")?.value || String(CONFIG.DEFAULT_MAX_TOKENS)),
         };
 
         const res = await API.fetchChatStream(payload, abortController.signal);
@@ -71,27 +90,53 @@ export async function sendMessage(state) {
                 try {
                     const data = JSON.parse(line.slice(6));
                     
-                    if (data.type === "content" && data.chunk) {
+                    // Status Step Update
+                    if (data.type === "step") {
+                        UI.updateLoadingStatus(loadingMsgEl, data.message, COLORS.teal);
+                    }
+                    
+                    // RAG Sources
+                    else if (data.type === "rag_sources") {
+                        UI.renderRagSources(data.chunks);
+                    }
+                    
+                    // Context Block Debug
+                    else if (data.type === "context") {
+                        console.log("Context built:", data.context_block);
+                    }
+
+                    // Content Streaming
+                    else if (data.type === "content" && data.chunk) {
                         if (!assistantMsgEl) {
-                            loadingMsgEl.remove();
+                            if (loadingMsgEl?.parentNode) loadingMsgEl.remove();
                             assistantMsgEl = UI.addMessage("assistant", "", modelName);
                         }
                         fullResponse += data.chunk;
-                        assistantMsgEl.innerHTML = typeof marked !== 'undefined' ? marked.parse(fullResponse) : fullResponse;
+                        if (assistantMsgEl) {
+                            assistantMsgEl.innerHTML = parseMarkdown(fullResponse);
+                        }
                         UI.scrollToBottom();
-                    } else if (data.type === "done") {
+                    } 
+                    
+                    // Completion
+                    else if (data.type === "done") {
                         if (!assistantMsgEl) {
-                            loadingMsgEl.remove();
+                            if (loadingMsgEl?.parentNode) loadingMsgEl.remove();
                             assistantMsgEl = UI.addMessage("assistant", "", modelName);
                         }
                         fullResponse = data.response || fullResponse;
-                        assistantMsgEl.innerHTML = typeof marked !== 'undefined' ? marked.parse(fullResponse) : fullResponse;
+                        if (assistantMsgEl) {
+                            assistantMsgEl.innerHTML = parseMarkdown(fullResponse);
+                        }
                         UI.scrollToBottom();
-                    } else if (data.type === "error") {
+                    } 
+                    
+                    // Error
+                    else if (data.type === "error") {
                         throw new Error(data.error);
                     }
                 } catch (e) {
-                    if (e.message !== "error") console.error("SSE parse error", e);
+                    if (e.message !== "error") console.error("SSE parse error", e, line);
                 }
             }
         }
@@ -111,3 +156,4 @@ export async function sendMessage(state) {
         input?.focus();
     }
 }
+

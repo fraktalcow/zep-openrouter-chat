@@ -5,31 +5,22 @@ Simple RAG endpoints using OpenRouter embeddings.
 All logic handled by backend - frontend just calls these.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from openrouter_service import OpenRouterService
+from config import get_embedding_model, set_embedding_model
 
 router = APIRouter(prefix="/rag", tags=["rag"])
 
-# Service instance
+# Service instance (injected at startup)
 _service: Optional[OpenRouterService] = None
-_embedding_model: str = "openai/text-embedding-3-small"
 
 
 def init_services(openrouter_service: OpenRouterService):
     global _service
     _service = openrouter_service
-
-
-def set_embedding_model(model_id: str):
-    global _embedding_model
-    _embedding_model = model_id
-
-
-def get_embedding_model() -> str:
-    return _embedding_model
 
 
 # Request Models
@@ -59,7 +50,7 @@ async def get_embedding_models():
     models = await _service.fetch_embedding_models()
     return {
         "models": models,
-        "current": _embedding_model,
+        "current": get_embedding_model(),
     }
 
 
@@ -79,7 +70,7 @@ async def ingest(request: IngestRequest):
     try:
         result = await _service.add_documents(
             documents=[{"text": request.text, "metadata": request.metadata or {}}],
-            embedding_model=_embedding_model,
+            embedding_model=get_embedding_model(),
         )
         return result
     except Exception as e:
@@ -96,7 +87,7 @@ async def search(request: SearchRequest):
         results = await _service.search(
             query=request.query,
             top_k=request.top_k,
-            embedding_model=_embedding_model,
+            embedding_model=get_embedding_model(),
         )
         return {"results": results, "count": len(results)}
     except Exception as e:
@@ -120,5 +111,5 @@ async def stats():
     
     return {
         "document_count": _service.get_document_count(),
-        "embedding_model": _embedding_model,
+        "embedding_model": get_embedding_model(),
     }

@@ -1,7 +1,12 @@
+/**
+ * Main Application Module
+ * Orchestrates initialization, event handling, and core app state.
+ */
 
 import * as API from './api.js';
 import * as Graph from './graph.js';
 import * as UI from './ui.js';
+import { CONFIG, COLORS } from './config.js';
 import { sendMessage } from './chat.js';
 
 // Global State
@@ -64,12 +69,7 @@ async function initSession(forceNew = false) {
 
     try {
         const data = await API.initSession(payload);
-        state.sessionId = data.session_id;
-        state.userId = data.user_id;
-
-        const badge = document.getElementById("session-badge");
-        if (badge) badge.textContent = `ID: ${state.sessionId.split("_")[1] || state.sessionId}`;
-        
+        setActiveSession(data);
         document.getElementById("chat-box").innerHTML = "";
         refreshGraph();
         UI.addMessage("system", "Session initialized.");
@@ -78,13 +78,185 @@ async function initSession(forceNew = false) {
     }
 }
 
-// Global scope for HTML onclick
-window.initSession = initSession;
-window.openSchemaModal = () => document.getElementById("schema-modal")?.classList.add("active");
-window.closeSchemaModal = () => document.getElementById("schema-modal")?.classList.remove("active");
-window.refreshGraph = refreshGraph;
-window.resetZoom = Graph.resetZoom;
-window.sendMessage = handleSendMessage;
+// --- Global scope exports for HTML onclick handlers ---
+Object.assign(window, {
+    initSession,
+    refreshGraph,
+    openSessionsModal,
+    closeSessionsModal,
+    loadSession,
+    deleteSessionById,
+    sendMessage: handleSendMessage,
+    resetZoom: Graph.resetZoom,
+    openSchemaModal: () => document.getElementById("schema-modal")?.classList.add("active"),
+    closeSchemaModal: () => document.getElementById("schema-modal")?.classList.remove("active"),
+});
+
+// --- Session Management ---
+
+/**
+ * Set active session and update UI.
+ */
+function setActiveSession(data) {
+    state.sessionId = data.session_id;
+    state.userId = data.user_id;
+    
+    const badge = document.getElementById("session-badge");
+    if (badge) badge.textContent = `ID: ${state.sessionId.split("_")[1] || state.sessionId}`;
+    
+    // Update form fields if session has data
+    if (data.first_name) document.getElementById("first-name").value = data.first_name;
+    if (data.last_name) document.getElementById("last-name").value = data.last_name;
+    if (data.traits) document.getElementById("traits-input").value = data.traits;
+    if (data.preferences) document.getElementById("preferences-input").value = data.preferences;
+    if (data.business_data) document.getElementById("business-data-input").value = data.business_data;
+}
+
+/**
+ * Open sessions modal and load sessions.
+ */
+async function openSessionsModal() {
+    document.getElementById("sessions-modal")?.classList.add("active");
+    await renderSessionsModal();
+}
+
+/**
+ * Close sessions modal.
+ */
+function closeSessionsModal() {
+    document.getElementById("sessions-modal")?.classList.remove("active");
+}
+
+/**
+ * Group sessions by time period.
+ */
+function groupSessionsByTime(sessions) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+    const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7);
+    
+    const groups = {
+        "Today": [],
+        "Yesterday": [],
+        "This Week": [],
+        "Older": []
+    };
+    
+    sessions.forEach(s => {
+        const created = new Date(s.created_at);
+        if (created >= today) {
+            groups["Today"].push(s);
+        } else if (created >= yesterday) {
+            groups["Yesterday"].push(s);
+        } else if (created >= weekAgo) {
+            groups["This Week"].push(s);
+        } else {
+            groups["Older"].push(s);
+        }
+    });
+    
+    return groups;
+}
+
+/**
+ * Render sessions modal content with time grouping.
+ */
+async function renderSessionsModal() {
+    const container = document.getElementById("sessions-modal-content");
+    if (!container) return;
+    
+    container.innerHTML = '<div class="sessions-loading">Loading sessions...</div>';
+    
+    try {
+        const { sessions } = await API.listSessions();
+        
+        if (!sessions.length) {
+            container.innerHTML = '<div class="sessions-empty">No saved sessions.<br>Click "New Session" to create one.</div>';
+            return;
+        }
+        
+        const groups = groupSessionsByTime(sessions);
+        let html = '';
+        
+        for (const [label, groupSessions] of Object.entries(groups)) {
+            if (groupSessions.length === 0) continue;
+            
+            html += `<div class="session-group">`;
+            html += `<div class="session-group-header">${label}</div>`;
+            
+            groupSessions.forEach(s => {
+                const isActive = s.session_id === state.sessionId;
+                const shortId = s.session_id.split('_')[1] || s.session_id;
+                
+                html += `
+                    <div class="session-item ${isActive ? 'active' : ''}" 
+                         data-session-id="${s.session_id}"
+                         onclick="loadSession('${s.session_id}')">
+                        <div class="session-info">
+                            <div class="session-name">${s.first_name} ${s.last_name}</div>
+                            <div class="session-meta">${shortId} • ${s.traits || 'No traits'}</div>
+                        </div>
+                        <button class="session-delete" onclick="event.stopPropagation(); deleteSessionById('${s.session_id}')">✕</button>
+                    </div>
+                `;
+            });
+            
+            html += `</div>`;
+        }
+        
+        container.innerHTML = html;
+    } catch (e) {
+        console.error("Failed to load sessions", e);
+        container.innerHTML = '<div class="sessions-empty">Error loading sessions</div>';
+    }
+}
+
+/**
+ * Load an existing session by ID.
+ */
+async function loadSession(sessionId) {
+    if (sessionId === state.sessionId) {
+        closeSessionsModal();
+        return;
+    }
+    
+    try {
+        const data = await API.getSession(sessionId);
+        setActiveSession(data);
+        document.getElementById("chat-box").innerHTML = "";
+        refreshGraph();
+        closeSessionsModal();
+        UI.addMessage("system", `Loaded session: ${data.first_name} ${data.last_name}`);
+    } catch (e) {
+        console.error("Failed to load session", e);
+        UI.addMessage("system", "Failed to load session.");
+    }
+}
+
+/**
+ * Delete a session by ID.
+ */
+async function deleteSessionById(sessionId) {
+    if (!confirm("Delete this session?")) return;
+    
+    try {
+        await API.deleteSession(sessionId);
+        
+        // If deleted current session, create new one
+        if (sessionId === state.sessionId) {
+            state.sessionId = null;
+            state.userId = null;
+            closeSessionsModal();
+            initSession(true);
+        } else {
+            // Refresh the modal
+            await renderSessionsModal();
+        }
+    } catch (e) {
+        console.error("Failed to delete session", e);
+    }
+}
 
 // --- Logic ---
 
@@ -112,10 +284,9 @@ export async function refreshGraph() {
  * messages are added, so we need to poll for updates.
  */
 export async function scheduleGraphRefresh() {
-    const delays = [500, 2000, 5000]; // Poll at 0.5s, 2s, 5s
     let lastCounts = await refreshGraph();
     
-    for (const delay of delays) {
+    for (const delay of CONFIG.POLL_DELAYS) {
         await new Promise(resolve => setTimeout(resolve, delay));
         const counts = await refreshGraph();
         
@@ -148,9 +319,9 @@ async function populateModels() {
             (model.pricing.prompt === "0" ? freeGroup : paidGroup).appendChild(option);
         });
         select.append(freeGroup, paidGroup);
-        select.value = "google/gemini-2.0-flash-exp:free";
+        select.value = CONFIG.DEFAULT_MODEL;
     } catch (e) {
-        select.innerHTML = "<option value='meta-llama/llama-3.2-3b-instruct:free'>Fallback: Llama 3.2 3B</option>";
+        select.innerHTML = `<option value='${CONFIG.FALLBACK_MODEL}'>Fallback: Llama 3.2 3B</option>`;
     }
 }
 
@@ -167,7 +338,7 @@ async function populateEmbeddingModels() {
             option.textContent = model.name;
             select.appendChild(option);
         });
-        select.value = data.current || "openai/text-embedding-3-small";
+        select.value = data.current || CONFIG.DEFAULT_EMBEDDING_MODEL;
         
         // Update on change
         select.addEventListener("change", async () => {
@@ -219,10 +390,10 @@ async function updateRAGStatus() {
     try {
         const data = await API.fetchRAGStats();
         status.textContent = `✓ ${data.document_count} docs indexed | Model: ${data.embedding_model}`;
-        status.style.color = "var(--ctp-green)";
+        status.style.color = COLORS.green;
     } catch (e) {
         status.textContent = "✗ Error";
-        status.style.color = "var(--ctp-red)";
+        status.style.color = COLORS.red;
     }
 }
 
@@ -234,20 +405,20 @@ async function handleIngest() {
     const status = document.getElementById("rag-status");
     if (status) {
         status.textContent = "⏳ Ingesting...";
-        status.style.color = "var(--ctp-blue)";
+        status.style.color = COLORS.blue;
     }
     
     try {
         const data = await API.ingestDocument(text, { source: "manual" });
         if (status) {
             status.textContent = `✓ Added ${data.added} doc (total: ${data.total})`;
-            status.style.color = "var(--ctp-green)";
+            status.style.color = COLORS.green;
         }
         textArea.value = "";
     } catch (e) {
         if (status) {
             status.textContent = `✗ Error: ${e.message}`;
-            status.style.color = "var(--ctp-red)";
+            status.style.color = COLORS.red;
         }
     }
 }

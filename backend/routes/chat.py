@@ -4,9 +4,10 @@ from pydantic import BaseModel, Field
 import json
 from textwrap import dedent
 
+import db
 from openrouter_service import OpenRouterService
 from zep_service import ZepService
-from routes.rag import get_embedding_model
+from config import get_embedding_model
 
 router = APIRouter()
 
@@ -55,14 +56,13 @@ class ChatRequest(BaseModel):
 # Injected by server.py
 zep_service: ZepService = None
 openrouter_service: OpenRouterService = None
-SESSIONS: dict = None
 
 
-def init_services(zep: ZepService, openrouter: OpenRouterService, sessions: dict):
-    global zep_service, openrouter_service, SESSIONS
+def init_services(zep: ZepService, openrouter: OpenRouterService):
+    """Initialize with services only - sessions now use SQLite."""
+    global zep_service, openrouter_service
     zep_service = zep
     openrouter_service = openrouter
-    SESSIONS = sessions
 
 
 async def _stream_chat_response(request: ChatRequest):
@@ -70,20 +70,22 @@ async def _stream_chat_response(request: ChatRequest):
     Internal generator for streaming chat responses.
     Yields SSE-formatted data chunks.
     """
-    session_meta = SESSIONS.get(request.session_id)
+    # Get session from SQLite
+    session_meta = db.get_session(request.session_id)
     if not session_meta:
         yield f"data: {json.dumps({'error': 'Unknown session. Create one first.'})}\n\n"
         return
+
 
     # Add user message to memory
     if request.use_memory or request.use_retrieval:
         await zep_service.add_memory(request.session_id, "user", request.message)
 
     context_sections = {"memory_section": "", "graph_section": "", "rag_section": ""}
-    prompt = request.message
-
-    # Build Zep context block
+    
+    # 1. Build Zep context block
     if request.use_memory or request.use_retrieval:
+        yield f"data: {json.dumps({'type': 'step', 'id': 'zep', 'message': 'Retrieving Zep memory...'})}\n\n"
         zep_context = await zep_service.build_context_block(
             session_id=request.session_id,
             user_id=session_meta.get("user_id"),
@@ -95,26 +97,46 @@ async def _stream_chat_response(request: ChatRequest):
         context_sections["memory_section"] = zep_context.get("memory_section", "")
         context_sections["graph_section"] = zep_context.get("graph_section", "")
 
-    # Add RAG context if enabled
+    # 2. RAG Pipeline
+    rag_chunks = []
     if request.use_rag and openrouter_service.get_document_count() > 0:
         try:
+            # Transparency: Documents -> Embeddings
+            yield f"data: {json.dumps({'type': 'step', 'id': 'embedding', 'message': 'Generating query embedding...'})}\n\n"
+            
+            # Transparency: Similarity Search
+            yield f"data: {json.dumps({'type': 'step', 'id': 'search', 'message': 'Searching vector store...'})}\n\n"
+            
             rag_results = await openrouter_service.search(
                 query=request.message,
                 top_k=3,
                 embedding_model=get_embedding_model(),
             )
+            
+            # Transparency: Relevant Chunks
             if rag_results:
                 rag_texts = []
                 for r in rag_results:
                     score = r.get("score", 0)
-                    if score > 0.5:  # Only include relevant results
-                        rag_texts.append(f"- {r['text'][:500]}...")
+                    if score > 0.4:  # Threshold
+                        rag_texts.append(f"- {r['text']}")
+                        rag_chunks.append({
+                            "text": r["text"],
+                            "score": score,
+                            "metadata": r.get("metadata")
+                        })
+                
                 if rag_texts:
                     context_sections["rag_section"] = "\n".join(rag_texts)
+                    yield f"data: {json.dumps({'type': 'rag_sources', 'chunks': rag_chunks})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'type': 'step', 'id': 'rag_empty', 'message': 'No relevant chunks found.'})}\n\n"
+            
         except Exception as e:
             print(f"RAG search error: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'error': f'RAG Error: {str(e)}'})}\n\n"
 
-    # Build full prompt with context
+    # Build full prompt
     prompt = DEFAULT_CONTEXT_TEMPLATE.format(
         session_id=request.session_id,
         user_name=f"{session_meta['first_name']} {session_meta['last_name']}",
@@ -126,30 +148,33 @@ async def _stream_chat_response(request: ChatRequest):
         query=request.message,
     )
     
-    # Append RAG section if present
     if context_sections["rag_section"]:
         prompt += f"\n\n# RAG Retrieved Documents\n{context_sections['rag_section']}"
 
-    # Send context block info first
-    yield f"data: {json.dumps({'type': 'context', 'context_block': {'sections': context_sections, 'use_memory': request.use_memory, 'use_retrieval': request.use_retrieval, 'use_rag': request.use_rag}})}\n\n"
+    # Send context debug info
+    yield f"data: {json.dumps({'type': 'context', 'context_block': {'sections': context_sections}})}\n\n"
 
-    # Generate AI response if enabled
+    # 3. LLM Generation -> Answer
     if request.use_ai:
+        yield f"data: {json.dumps({'type': 'step', 'id': 'llm', 'message': 'Generating answer...'})}\n\n"
+        
         try:
-            full_response = await openrouter_service.generate_response(
+            full_response = ""
+            async for chunk in openrouter_service.generate_response_stream(
                 prompt,
                 model_name=request.model_name,
                 temperature=request.temperature,
                 max_tokens=request.max_tokens
-            )
-
-            yield f"data: {json.dumps({'type': 'content', 'chunk': full_response})}\n\n"
+            ):
+                full_response += chunk
+                yield f"data: {json.dumps({'type': 'content', 'chunk': chunk})}\n\n"
             
             # Save response to memory
             if request.use_memory or request.use_retrieval:
                 await zep_service.add_memory(request.session_id, "assistant", full_response)
             
             yield f"data: {json.dumps({'type': 'done', 'response': full_response})}\n\n"
+            
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
     else:

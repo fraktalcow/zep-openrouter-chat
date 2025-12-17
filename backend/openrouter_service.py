@@ -3,6 +3,8 @@ import httpx
 import math
 from datetime import datetime, timedelta
 
+import db
+
 
 def cosine_similarity(a: List[float], b: List[float]) -> float:
     """Calculate cosine similarity between two vectors."""
@@ -444,10 +446,7 @@ class OpenRouterService:
             raise
 
     # ==================== RAG STORE ====================
-    # Simple in-memory vector store for document RAG
-    
-    _rag_documents: List[Dict[str, Any]] = []
-    _rag_embeddings: List[List[float]] = []
+    # Uses SQLite for persistent storage
     
     async def add_documents(
         self,
@@ -455,7 +454,7 @@ class OpenRouterService:
         embedding_model: str = "openai/text-embedding-3-small"
     ) -> Dict[str, Any]:
         """
-        Add documents to the RAG store.
+        Add documents to the RAG store (SQLite).
         
         Args:
             documents: List of {"text": str, "metadata": dict} objects
@@ -466,15 +465,8 @@ class OpenRouterService:
         """
         texts = [doc["text"] for doc in documents]
         embeddings = await self.generate_embeddings(texts, embedding_model)
-        
-        for doc, emb in zip(documents, embeddings):
-            self._rag_documents.append({
-                "text": doc["text"],
-                "metadata": doc.get("metadata", {}),
-            })
-            self._rag_embeddings.append(emb)
-        
-        return {"added": len(documents), "total": len(self._rag_documents)}
+        total = db.add_documents(documents, embeddings)
+        return {"added": len(documents), "total": total}
     
     async def search(
         self,
@@ -493,7 +485,8 @@ class OpenRouterService:
         Returns:
             List of documents with similarity scores
         """
-        if not self._rag_documents:
+        documents, embeddings = db.get_all_documents()
+        if not documents:
             return []
         
         # Get query embedding
@@ -501,7 +494,7 @@ class OpenRouterService:
         
         # Calculate similarities
         results = []
-        for i, (doc, emb) in enumerate(zip(self._rag_documents, self._rag_embeddings)):
+        for doc, emb in zip(documents, embeddings):
             score = cosine_similarity(query_emb, emb)
             results.append({
                 "text": doc["text"],
@@ -515,11 +508,9 @@ class OpenRouterService:
     
     def clear_documents(self) -> Dict[str, Any]:
         """Clear all documents from RAG store."""
-        count = len(self._rag_documents)
-        self._rag_documents = []
-        self._rag_embeddings = []
+        count = db.clear_documents()
         return {"cleared": count}
     
     def get_document_count(self) -> int:
         """Get number of documents in RAG store."""
-        return len(self._rag_documents)
+        return db.get_document_count()
