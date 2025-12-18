@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Optional
+import asyncio
 
 from zep_cloud.client import AsyncZep
 from zep_cloud.types.edge_type import EdgeType
@@ -233,40 +234,39 @@ class ZepService:
             "graph_facts": [],
         }
 
-        if include_memory:
-            memory = await self.get_memory(session_id)
-            if memory and getattr(memory, "messages", None):
-                recent_messages = memory.messages[-max_messages:]
-                formatted_history = "\n".join(
-                    f"{msg.role}: {msg.content}".strip() for msg in recent_messages
-                )
-                context["memory_section"] = formatted_history or "No prior memory yet."
-                context["memory_messages"] = [
-                    {"role": msg.role, "content": msg.content} for msg in recent_messages
-                ]
-            else:
-                context["memory_section"] = "No prior memory yet."
+        if include_memory and include_graph and user_id:
+            # Parallelize all 3 calls
+            memory_task = self.get_memory(session_id)
+            edges_task = self.search_graph(query, user_id=user_id, limit=graph_limit, search_scope="edges")
+            nodes_task = self.search_graph(query, user_id=user_id, limit=max(2, graph_limit // 2), search_scope="nodes")
+            
+            memory, edges, nodes = await asyncio.gather(memory_task, edges_task, nodes_task)
+        else:
+            # Sequential fallback if not all enabled (or just simpler logic)
+            memory = await self.get_memory(session_id) if include_memory else None
+            edges = await self.search_graph(query, user_id=user_id, limit=graph_limit, search_scope="edges") if (include_graph and user_id) else []
+            nodes = await self.search_graph(query, user_id=user_id, limit=max(2, graph_limit // 2), search_scope="nodes") if (include_graph and user_id) else []
 
+        # Process Memory
+        if memory and getattr(memory, "messages", None):
+            recent_messages = memory.messages[-max_messages:]
+            formatted_history = "\n".join(
+                f"{msg.role}: {msg.content}".strip() for msg in recent_messages
+            )
+            context["memory_section"] = formatted_history or "No prior memory yet."
+            context["memory_messages"] = [
+                {"role": msg.role, "content": msg.content} for msg in recent_messages
+            ]
+        else:
+            context["memory_section"] = "No prior memory yet."
+
+        # Process Graph
         if include_graph and user_id:
             facts: List[str] = []
-            # Try edges first for fact triples
-            edges = await self.search_graph(
-                query,
-                user_id=user_id,
-                limit=graph_limit,
-                search_scope="edges",
-            )
             for edge in edges or []:
                 fact = getattr(edge, "fact", None)
                 if fact:
                     facts.append(fact.strip())
-            # Supplement with nodes for summaries
-            nodes = await self.search_graph(
-                query,
-                user_id=user_id,
-                limit=max(2, graph_limit // 2),
-                search_scope="nodes",
-            )
             for node in nodes or []:
                 summary = getattr(node, "summary", None) or getattr(node, "name", None)
                 if summary:

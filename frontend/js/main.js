@@ -30,8 +30,6 @@ document.addEventListener("DOMContentLoaded", () => {
 function setupEventListeners() {
     // Toggles
     document.getElementById("zep-toggle")?.addEventListener("change", toggleZepSettings);
-    document.getElementById("rag-toggle")?.addEventListener("change", toggleRAGSettings);
-
     // Chat
     document.getElementById("send-btn")?.addEventListener("click", handleSendMessage);
     document.getElementById("message-input")?.addEventListener("keydown", (e) => {
@@ -40,7 +38,6 @@ function setupEventListeners() {
 
     // RAG Ingest
     document.getElementById("ingest-btn")?.addEventListener("click", handleIngest);
-    document.getElementById("clear-rag-btn")?.addEventListener("click", handleClearRAG);
 
     // Schema
     document.querySelector("#schema-modal .modal-footer button:last-child")?.addEventListener("click", handleSaveSchema);
@@ -325,30 +322,6 @@ async function populateModels() {
     }
 }
 
-async function populateEmbeddingModels() {
-    const select = document.getElementById("embedding-model-select");
-    if (!select) return;
-    
-    try {
-        const data = await API.fetchEmbeddingModels();
-        select.innerHTML = "";
-        data.models.forEach(model => {
-            const option = document.createElement("option");
-            option.value = model.id;
-            option.textContent = model.name;
-            select.appendChild(option);
-        });
-        select.value = data.current || CONFIG.DEFAULT_EMBEDDING_MODEL;
-        
-        // Update on change
-        select.addEventListener("change", async () => {
-            await API.setEmbeddingModel(select.value);
-        });
-    } catch (e) {
-        console.error("Failed to load embedding models", e);
-    }
-}
-
 async function fetchSchema() {
     try {
         const data = await API.fetchSchema();
@@ -376,60 +349,26 @@ function toggleZepSettings() {
     if (disabled) disabled.style.display = isEnabled ? "none" : "block";
 }
 
-function toggleRAGSettings() {
-    const isEnabled = document.getElementById("rag-toggle")?.checked;
-    const settings = document.getElementById("rag-settings");
-    if (settings) settings.style.display = isEnabled ? "block" : "none";
-    if (isEnabled) updateRAGStatus();
-}
-
-async function updateRAGStatus() {
-    const status = document.getElementById("rag-status");
-    if (!status) return;
-    
-    try {
-        const data = await API.fetchRAGStats();
-        status.textContent = `✓ ${data.document_count} docs indexed | Model: ${data.embedding_model}`;
-        status.style.color = COLORS.green;
-    } catch (e) {
-        status.textContent = "✗ Error";
-        status.style.color = COLORS.red;
-    }
-}
-
 async function handleIngest() {
     const textArea = document.getElementById("document-text-input");
     const text = textArea?.value?.trim();
     if (!text) return alert("Enter document text");
     
-    const status = document.getElementById("rag-status");
-    if (status) {
-        status.textContent = "⏳ Ingesting...";
-        status.style.color = COLORS.blue;
-    }
+    const ingestArea = document.getElementById("ingest-area");
+    const btn = document.getElementById("ingest-btn");
+    const originalText = btn.textContent;
+    btn.textContent = "Adding...";
+    btn.disabled = true;
     
     try {
-        const data = await API.ingestDocument(text, { source: "manual" });
-        if (status) {
-            status.textContent = `✓ Added ${data.added} doc (total: ${data.total})`;
-            status.style.color = COLORS.green;
-        }
+        await API.ingestDocument(text, { source: "manual" });
         textArea.value = "";
+        ingestArea.style.display = "none";
+        UI.addMessage("system", "✓ Context added to RAG.");
     } catch (e) {
-        if (status) {
-            status.textContent = `✗ Error: ${e.message}`;
-            status.style.color = COLORS.red;
-        }
-    }
-}
-
-async function handleClearRAG() {
-    if (!confirm("Clear all RAG documents?")) return;
-    
-    try {
-        await API.clearRAG();
-        updateRAGStatus();
-    } catch (e) {
-        console.error("Clear failed", e);
+        alert(`Error adding context: ${e.message}`);
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
     }
 }

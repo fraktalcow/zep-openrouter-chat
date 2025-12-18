@@ -29,8 +29,6 @@ export const fetchGraphData = (userId) => fetchJson(`/graph/${userId}`);
 
 // RAG
 export const fetchRAGStats = () => fetchJson("/rag/stats");
-export const fetchEmbeddingModels = () => fetchJson("/rag/models");
-export const setEmbeddingModel = (modelId) => fetchJson("/rag/models", { method: "POST", headers: HEADERS, body: JSON.stringify({ model_id: modelId }) });
 export const ingestDocument = (text, metadata) => fetchJson("/rag/ingest", { method: "POST", headers: HEADERS, body: JSON.stringify({ text, metadata }) });
 export const searchRAG = (query, topK) => fetchJson("/rag/search", { method: "POST", headers: HEADERS, body: JSON.stringify({ query, top_k: topK }) });
 export const clearRAG = () => fetchJson("/rag/clear", { method: "POST" });

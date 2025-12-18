@@ -30,6 +30,9 @@
       rel="stylesheet"
     />
 
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
     <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
@@ -176,54 +179,23 @@
               class="disabled-msg"
               style="display: none"
             >
-              Zep memory disabled. Chat will use RAG only.
+              Zep memory disabled.
             </div>
           </div>
-
+          
           <hr class="divider" />
-
-          <!-- RAG SECTION (OpenRouter Embeddings) -->
+          
+          <!-- RAG Toggle Only -->
           <div class="config-section">
-            <div class="section-header flex">
-              <span>RAG (OpenRouter)</span>
+             <div class="section-header flex">
+              <span>RAG (Pinecone)</span>
               <label class="toggle-switch" style="margin: 0">
-                <input type="checkbox" id="rag-toggle" />
+                <input type="checkbox" id="rag-toggle" checked />
                 <span class="slider"></span>
               </label>
             </div>
-
-            <div id="rag-settings" style="display: none">
-              <div class="input-group">
-                <label>Embedding Model</label>
-                <select id="embedding-model-select">
-                  <option value="openai/text-embedding-3-small">
-                    text-embedding-3-small
-                  </option>
-                </select>
-              </div>
-
-              <div class="input-group">
-                <label>Document Text</label>
-                <textarea
-                  id="document-text-input"
-                  class="mono-text"
-                  style="min-height: 60px"
-                  placeholder="Paste document text to ingest..."
-                ></textarea>
-              </div>
-
-              <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem">
-                <button id="ingest-btn" class="full-width">Ingest</button>
-                <button id="clear-rag-btn" class="secondary">Clear</button>
-              </div>
-
-              <div
-                id="rag-status"
-                class="status-text"
-                style="margin-top: 0.5rem"
-              ></div>
-            </div>
           </div>
+
         </div>
       </div>
 
@@ -293,21 +265,31 @@
               <p>System Ready.<br />Start the conversation.</p>
             </div>
           </div>
+          
+          <!-- Integrated Ingest UI -->
+          <div id="ingest-area" class="ingest-area" style="display: none;">
+             <textarea id="document-text-input" placeholder="Paste context or document text here..."></textarea>
+             <div class="ingest-controls">
+                <button id="ingest-btn" class="btn-sm">Add to Context</button>
+                <button onclick="document.getElementById('ingest-area').style.display='none'" class="secondary btn-sm">Cancel</button>
+             </div>
+          </div>
+
           <div class="input-area">
-            <div class="input-wrapper" style="position: relative">
+            <button class="icon-btn" onclick="document.getElementById('ingest-area').style.display = document.getElementById('ingest-area').style.display === 'none' ? 'block' : 'none'" title="Add Context">
+                <i class="fa-solid fa-paperclip"></i>
+            </button>
+            <div class="input-wrapper" style="position: relative; flex: 1;">
               <input
                 type="text"
                 id="message-input"
                 placeholder="Type your message..."
                 autocomplete="off"
               />
-              <div
-                id="tool-palette"
-                class="tool-palette"
-                style="display: none"
-              ></div>
             </div>
-            <button onclick="sendMessage()" id="send-btn">SEND</button>
+            <button onclick="sendMessage()" id="send-btn">
+                <i class="fa-solid fa-paper-plane"></i>
+            </button>
           </div>
         </div>
       </div>

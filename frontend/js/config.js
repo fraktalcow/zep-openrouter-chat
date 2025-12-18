@@ -7,7 +7,6 @@ export const CONFIG = {
     // Models
     DEFAULT_MODEL: "google/gemini-2.0-flash-exp:free",
     FALLBACK_MODEL: "meta-llama/llama-3.2-3b-instruct:free",
-    DEFAULT_EMBEDDING_MODEL: "openai/text-embedding-3-small",
     
     // Timing
     POLL_DELAYS: [500, 2000, 5000],  // Graph refresh polling intervals (ms)

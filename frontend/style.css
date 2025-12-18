@@ -508,23 +508,71 @@ input[type="radio"] {
   gap: 0.75rem;
   padding-top: 1rem;
   border-top: 1px solid var(--ctp-surface0);
+  align-items: center;
 }
 .input-wrapper {
   position: relative;
   flex: 1;
 }
-.input-wrapper::before {
-  content: "";
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--ctp-green);
-  font-weight: 700;
-}
+
 #message-input {
   padding-left: 1rem;
   height: 100%;
+}
+
+.icon-btn {
+  background: transparent;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ctp-subtext0);
+  border: 1px solid transparent;
+  border-radius: 50%;
+  font-size: 1.1rem;
+}
+.icon-btn:hover {
+  background: rgba(var(--ctp-lavender-rgb), 0.15);
+  color: var(--ctp-lavender);
+  box-shadow: none;
+}
+#send-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+}
+
+/* Ingest Area */
+.ingest-area {
+  background: rgba(var(--ctp-mantle), 0.7);
+  border: 1px solid var(--ctp-surface0);
+  border-radius: var(--border-radius);
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  animation: slideUp 0.2s ease-out;
+}
+.ingest-area textarea {
+  min-height: 80px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+  resize: vertical;
+}
+.ingest-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Tool Palette */

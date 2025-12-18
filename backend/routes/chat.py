@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+import asyncio
+from fastapi import APIRouter, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import json
@@ -78,17 +79,19 @@ async def _stream_chat_response(request: ChatRequest):
         yield f"data: {json.dumps({'error': 'Unknown session. Create one first.'})}\n\n"
         return
 
-
-    # Add user message to memory
-    if request.use_memory or request.use_retrieval:
-        await zep_service.add_memory(request.session_id, "user", request.message)
-
     context_sections = {"memory_section": "", "graph_section": "", "rag_section": ""}
+    rag_chunks = []
     
-    # 1. Build Zep context block
+    # Send extraction status
+    yield f"data: {json.dumps({'type': 'step', 'id': 'retrieval', 'message': 'Retrieving context & memory...'})}\n\n"
+
+    # --- Parallel Retrieval ---
+    loop = asyncio.get_running_loop()
+    tasks = {}
+
+    # 1. Zep Context Task
     if request.use_memory or request.use_retrieval:
-        yield f"data: {json.dumps({'type': 'step', 'id': 'zep', 'message': 'Retrieving Zep memory...'})}\n\n"
-        zep_context = await zep_service.build_context_block(
+        tasks['zep'] = zep_service.build_context_block(
             session_id=request.session_id,
             user_id=session_meta.get("user_id"),
             query=request.message,
@@ -96,25 +99,38 @@ async def _stream_chat_response(request: ChatRequest):
             include_graph=request.use_retrieval,
             max_messages=request.context_message_limit,
         )
-        context_sections["memory_section"] = zep_context.get("memory_section", "")
-        context_sections["graph_section"] = zep_context.get("graph_section", "")
-
-    # 2. RAG Pipeline from Pinecone
-    rag_chunks = []
+    
+    # 2. RAG Task (Run sync Pinecone in executor)
     if request.use_rag:
-        try:
-            yield f"data: {json.dumps({'type': 'step', 'id': 'search', 'message': 'Searching Pinecone...'})}\n\n"
+        pinecone = get_pinecone_service()
+        tasks['rag'] = loop.run_in_executor(
+            None, 
+            lambda: pinecone.search(query=request.message, top_k=3, rerank=True)
+        )
+    
+    # Await all tasks
+    results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+    results_map = dict(zip(tasks.keys(), results))
+
+    # Process Zep Results
+    if 'zep' in results_map:
+        res = results_map['zep']
+        if isinstance(res, Exception):
+            print(f"Zep Error: {res}")
+            context_sections["memory_section"] = "Error retrieving memory."
+        else:
+            context_sections["memory_section"] = res.get("memory_section", "")
+            context_sections["graph_section"] = res.get("graph_section", "")
             
-            pinecone = get_pinecone_service()
-            rag_results = pinecone.search(
-                query=request.message,
-                top_k=3,
-                rerank=True
-            )
-            
-            # Use results
+    # Process RAG Results
+    if 'rag' in results_map:
+        res = results_map['rag']
+        if isinstance(res, Exception):
+             print(f"RAG Error: {res}")
+             yield f"data: {json.dumps({'type': 'error', 'error': f'RAG Error: {str(res)}'})}\n\n"
+        elif res:
             rag_texts = []
-            for r in rag_results:
+            for r in res:
                 score = r.get("score", 0)
                 if score > 0.4:  # Threshold
                     rag_texts.append(f"- {r['text']}")
@@ -123,16 +139,11 @@ async def _stream_chat_response(request: ChatRequest):
                         "score": score,
                         "metadata": r.get("metadata")
                     })
-            
             if rag_texts:
                 context_sections["rag_section"] = "\n".join(rag_texts)
                 yield f"data: {json.dumps({'type': 'rag_sources', 'chunks': rag_chunks})}\n\n"
             else:
-                yield f"data: {json.dumps({'type': 'step', 'id': 'rag_empty', 'message': 'No relevant chunks found.'})}\n\n"
-        
-        except Exception as e:
-            print(f"RAG search error: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'error': f'RAG Error: {str(e)}'})}\n\n"
+                 yield f"data: {json.dumps({'type': 'step', 'id': 'rag_empty', 'message': 'No relevant RAG chunks.'})}\n\n"
 
     # Build full prompt
     prompt = DEFAULT_CONTEXT_TEMPLATE.format(
@@ -143,12 +154,10 @@ async def _stream_chat_response(request: ChatRequest):
         business_data=session_meta.get("business_data") or "Not provided",
         memory_section=context_sections["memory_section"],
         graph_section=context_sections["graph_section"],
+        rag_section=context_sections["rag_section"],  # Added param to template
         query=request.message,
     )
     
-    if context_sections["rag_section"]:
-        prompt += f"\n\n# RAG Retrieved Documents\n{context_sections['rag_section']}"
-
     # Send context debug info
     yield f"data: {json.dumps({'type': 'context', 'context_block': {'sections': context_sections}})}\n\n"
 
@@ -167,9 +176,11 @@ async def _stream_chat_response(request: ChatRequest):
                 full_response += chunk
                 yield f"data: {json.dumps({'type': 'content', 'chunk': chunk})}\n\n"
             
-            # Save response to memory
+            # Save response to memory (Background? No, zep_service is async, can we BG it?)
+            # We can't access `background_tasks` here easily unless we pass it down. 
+            # StreamingResponse logic ends here. We can fire-and-forget task.
             if request.use_memory or request.use_retrieval:
-                await zep_service.add_memory(request.session_id, "assistant", full_response)
+                 asyncio.create_task(zep_service.add_memory(request.session_id, "assistant", full_response))
             
             yield f"data: {json.dumps({'type': 'done', 'response': full_response})}\n\n"
             
@@ -182,8 +193,13 @@ async def _stream_chat_response(request: ChatRequest):
 
 
 @router.post("")
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     """Chat endpoint with streaming SSE response."""
+    
+    # Add user message to memory in background to unblock retrieval
+    if request.use_memory or request.use_retrieval:
+        background_tasks.add_task(zep_service.add_memory, request.session_id, "user", request.message)
+
     return StreamingResponse(
         _stream_chat_response(request),
         media_type="text/event-stream",
