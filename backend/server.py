@@ -1,6 +1,6 @@
 """
 FastAPI server for Zep + OpenRouter chat application.
-All session and RAG data persisted to SQLite.
+Session data persisted to Zep Cloud, RAG using Pinecone.
 """
 
 from pathlib import Path
@@ -19,7 +19,6 @@ from routes.memory import init_services as init_memory_services
 from routes.models import init_services as init_models_services
 from routes.schema import init_services as init_schema_services, load_schema
 from routes.session import init_services as init_session_services
-from routes.rag import init_services as init_rag_services
 from zep_service import ZepService
 
 load_dotenv()
@@ -50,7 +49,6 @@ init_schema_services(zep_service)
 init_models_services(openrouter_service)
 init_graph_services(zep_service)
 init_memory_services(zep_service)
-init_rag_services(openrouter_service)
 
 # Register API routes
 app.include_router(api_router)

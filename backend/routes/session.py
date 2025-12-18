@@ -1,4 +1,4 @@
-"""Session management routes with SQLite persistence."""
+"""Session management routes using Zep."""
 
 import uuid
 from typing import Optional
@@ -6,7 +6,6 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-import db
 from zep_service import ZepService
 
 router = APIRouter()
@@ -35,22 +34,26 @@ zep_service: ZepService = None
 
 
 def init_services(zep: ZepService):
-    """Initialize with Zep service only - sessions now use SQLite."""
+    """Initialize with Zep service."""
     global zep_service
     zep_service = zep
 
 
 @router.get("/list")
 async def list_sessions():
-    """List all saved sessions for the sidebar."""
-    sessions = db.list_sessions()
+    """List all saved sessions from Zep."""
+    if not zep_service:
+         raise HTTPException(status_code=503, detail="Service not initialized")
+    sessions = await zep_service.list_sessions()
     return {"sessions": sessions}
 
 
 @router.get("/{session_id}")
 async def get_session(session_id: str):
-    """Get a specific session by ID."""
-    session = db.get_session(session_id)
+    """Get a specific session by ID from Zep."""
+    if not zep_service:
+         raise HTTPException(status_code=503, detail="Service not initialized")
+    session = await zep_service.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return session
@@ -58,8 +61,10 @@ async def get_session(session_id: str):
 
 @router.delete("/{session_id}")
 async def delete_session(session_id: str):
-    """Delete a session."""
-    deleted = db.delete_session(session_id)
+    """Delete a session from Zep."""
+    if not zep_service:
+         raise HTTPException(status_code=503, detail="Service not initialized")
+    deleted = await zep_service.delete_session(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"status": "deleted", "session_id": session_id}
@@ -67,11 +72,16 @@ async def delete_session(session_id: str):
 
 @router.post("")
 async def create_session(request: SessionRequest):
-    """Create a new session with SQLite persistence."""
+    """Create a new session in Zep."""
+    if not zep_service:
+         raise HTTPException(status_code=503, detail="Service not initialized")
+
     user_id = request.user_id or f"user_{uuid.uuid4().hex[:8]}"
     session_id = f"session_{uuid.uuid4().hex[:8]}"
 
+    # Include session_id in metadata so we can recall it during listing
     metadata = {
+        "session_id": session_id,
         "preferences": request.preferences,
         "traits": request.traits,
         "business_data": request.business_data,
@@ -84,17 +94,6 @@ async def create_session(request: SessionRequest):
         first_name=request.first_name,
         last_name=request.last_name,
         metadata=metadata,
-    )
-
-    # Persist to SQLite
-    db.save_session(
-        session_id=session_id,
-        user_id=user_id,
-        first_name=request.first_name,
-        last_name=request.last_name,
-        traits=request.traits or "",
-        preferences=request.preferences or "",
-        business_data=request.business_data or "",
     )
 
     return {

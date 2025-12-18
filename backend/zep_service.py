@@ -213,6 +213,7 @@ class ZepService:
             print(f"Status check failed: {e}")
             return False
 
+
     async def build_context_block(
         self,
         *,
@@ -280,3 +281,104 @@ class ZepService:
                 context["graph_section"] = "No graph facts were retrieved for this query."
 
         return context
+    
+    async def list_sessions(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """List sessions (users) from Zep."""
+        try:
+            # We treat Users as Sessions in this app architecture
+            response = await self.client.user.list_ordered(page_size=limit, order_by="created_at", asc=False)
+            users = getattr(response, "users", [])
+            
+            sessions = []
+            for user in users:
+                # Need to find the associated session/thread ID. 
+                # For this app, we usually map 1 user -> 1 session.
+                # We'll rely on metadata if present, or just list the user info.
+                user_id = getattr(user, "user_id", "")
+                
+                # Try to get session ID from metadata first
+                # (We don't strictly have the session_id here unless we query threads for each user, 
+                # which is expensive. But we saved it in metadata in create_session?)
+                # Wait, create_session saved metadata to USER.
+                
+                meta = getattr(user, "metadata", {}) or {}
+                
+                # If we don't have session_id in metadata (legacy), we might skip or imply it.
+                # However, for the UI to work, we need a session_id.
+                # Let's assume we can use user_id if session_id is missing, or we fetch threads.
+                
+                sessions.append({
+                    "session_id": meta.get("session_id", "unknown"), # We will update create_session to store this
+                    "user_id": user_id,
+                    "first_name": getattr(user, "first_name", "User"),
+                    "last_name": getattr(user, "last_name", ""),
+                    "created_at": getattr(user, "created_at", ""),
+                    "metadata": meta
+                })
+            
+            # Filter out sessions with unknown IDs if critical
+            return [s for s in sessions if s["session_id"] != "unknown"]
+            
+        except Exception as e:
+            print(f"Error listing sessions: {e}")
+            return []
+
+    async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get session details. 
+        Since we map session <-> user, we need to find the user for this session 
+        OR we just assume we can't look up by session_id easily without an index.
+        
+        BUT, we probably have the User ID > Session ID mapping.
+        If we don't, we can't easily implement 'get_session(session_id)' without the local DB.
+        
+        Workaround: Store session_id as the User ID? 
+        The current app uses unique User IDs per session.
+        user_id = request.user_id or f"user_{uuid...}"
+        session_id = f"session_{uuid...}"
+        
+        If we made user_id == session_id, this would be easier. 
+        But assuming we want to keep distinct IDs:
+         We should use the session_list to find the user.
+        """
+        # Efficient lookup by session_id is hard without local DB if we don't map exact IDs.
+        # But we can try to look fetching the thread directly.
+        try:
+            thread = await self.client.thread.get(session_id)
+            user_id = getattr(thread, "user_id", None)
+            
+            if user_id:
+                user = await self.client.user.get(user_id)
+                meta = getattr(user, "metadata", {}) or {}
+                return {
+                    "session_id": session_id,
+                    "user_id": user_id,
+                    "first_name": getattr(user, "first_name", "User"),
+                    "last_name": getattr(user, "last_name", ""),
+                    "traits": meta.get("traits", ""),
+                    "preferences": meta.get("preferences", ""),
+                    "business_data": meta.get("business_data", ""),
+                    "created_at": getattr(user, "created_at", ""),
+                }
+        except Exception as e:
+            print(f"Error getting session {session_id}: {e}")
+        return None
+    
+    async def delete_session(self, session_id: str) -> bool:
+        """Delete session (thread) and associated user."""
+        try:
+            # Get user ID first
+            thread = await self.client.thread.get(session_id)
+            user_id = getattr(thread, "user_id", None)
+            
+            # Delete thread
+            await self.client.thread.delete(session_id)
+            
+            # Delete user if found
+            if user_id:
+                await self.client.user.delete(user_id)
+                
+            return True
+        except Exception as e:
+            print(f"Error deleting session: {e}")
+            return False

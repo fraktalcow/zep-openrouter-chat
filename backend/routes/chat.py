@@ -4,10 +4,9 @@ from pydantic import BaseModel, Field
 import json
 from textwrap import dedent
 
-import db
 from openrouter_service import OpenRouterService
 from zep_service import ZepService
-from config import get_embedding_model
+from pinecone_service import get_pinecone_service
 
 router = APIRouter()
 
@@ -32,6 +31,9 @@ DEFAULT_CONTEXT_TEMPLATE = dedent(
     # Knowledge Graph Retrieval
     {graph_section}
 
+    # RAG Context
+    {rag_section}
+
     # Latest Query
     {query}
 
@@ -45,7 +47,7 @@ class ChatRequest(BaseModel):
     message: str
     use_memory: bool = True
     use_retrieval: bool = True
-    use_rag: bool = False  # Use OpenRouter embeddings RAG
+    use_rag: bool = False
     use_ai: bool = True
     model_name: str = "meta-llama/llama-3.2-3b-instruct:free"
     context_message_limit: int = Field(default=6, ge=2, le=20)
@@ -59,7 +61,7 @@ openrouter_service: OpenRouterService = None
 
 
 def init_services(zep: ZepService, openrouter: OpenRouterService):
-    """Initialize with services only - sessions now use SQLite."""
+    """Initialize with services."""
     global zep_service, openrouter_service
     zep_service = zep
     openrouter_service = openrouter
@@ -70,8 +72,8 @@ async def _stream_chat_response(request: ChatRequest):
     Internal generator for streaming chat responses.
     Yields SSE-formatted data chunks.
     """
-    # Get session from SQLite
-    session_meta = db.get_session(request.session_id)
+    # Get session from Zep
+    session_meta = await zep_service.get_session(request.session_id)
     if not session_meta:
         yield f"data: {json.dumps({'error': 'Unknown session. Create one first.'})}\n\n"
         return
@@ -97,41 +99,37 @@ async def _stream_chat_response(request: ChatRequest):
         context_sections["memory_section"] = zep_context.get("memory_section", "")
         context_sections["graph_section"] = zep_context.get("graph_section", "")
 
-    # 2. RAG Pipeline
+    # 2. RAG Pipeline from Pinecone
     rag_chunks = []
-    if request.use_rag and openrouter_service.get_document_count() > 0:
+    if request.use_rag:
         try:
-            # Transparency: Documents -> Embeddings
-            yield f"data: {json.dumps({'type': 'step', 'id': 'embedding', 'message': 'Generating query embedding...'})}\n\n"
+            yield f"data: {json.dumps({'type': 'step', 'id': 'search', 'message': 'Searching Pinecone...'})}\n\n"
             
-            # Transparency: Similarity Search
-            yield f"data: {json.dumps({'type': 'step', 'id': 'search', 'message': 'Searching vector store...'})}\n\n"
-            
-            rag_results = await openrouter_service.search(
+            pinecone = get_pinecone_service()
+            rag_results = pinecone.search(
                 query=request.message,
                 top_k=3,
-                embedding_model=get_embedding_model(),
+                rerank=True
             )
             
-            # Transparency: Relevant Chunks
-            if rag_results:
-                rag_texts = []
-                for r in rag_results:
-                    score = r.get("score", 0)
-                    if score > 0.4:  # Threshold
-                        rag_texts.append(f"- {r['text']}")
-                        rag_chunks.append({
-                            "text": r["text"],
-                            "score": score,
-                            "metadata": r.get("metadata")
-                        })
-                
-                if rag_texts:
-                    context_sections["rag_section"] = "\n".join(rag_texts)
-                    yield f"data: {json.dumps({'type': 'rag_sources', 'chunks': rag_chunks})}\n\n"
-                else:
-                    yield f"data: {json.dumps({'type': 'step', 'id': 'rag_empty', 'message': 'No relevant chunks found.'})}\n\n"
+            # Use results
+            rag_texts = []
+            for r in rag_results:
+                score = r.get("score", 0)
+                if score > 0.4:  # Threshold
+                    rag_texts.append(f"- {r['text']}")
+                    rag_chunks.append({
+                        "text": r["text"],
+                        "score": score,
+                        "metadata": r.get("metadata")
+                    })
             
+            if rag_texts:
+                context_sections["rag_section"] = "\n".join(rag_texts)
+                yield f"data: {json.dumps({'type': 'rag_sources', 'chunks': rag_chunks})}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'step', 'id': 'rag_empty', 'message': 'No relevant chunks found.'})}\n\n"
+        
         except Exception as e:
             print(f"RAG search error: {e}")
             yield f"data: {json.dumps({'type': 'error', 'error': f'RAG Error: {str(e)}'})}\n\n"

@@ -16,13 +16,9 @@ def init_services(zep: ZepService):
 
 
 @router.get("/{user_id}")
-async def get_graph_data(user_id: str, limit: int = 100, source: str = "zep"):
+async def get_graph_data(user_id: str, limit: int = 100):
     """
-    Retrieve knowledge graph data for visualization.
-    Returns nodes and edges from either Zep or local GraphRAG.
-    
-    Query params:
-        source: "zep" (default) or "local" to choose graph source
+    Retrieve knowledge graph data for visualization from Zep.
     """
     try:
         graph_data = await zep_service.get_graph_data(user_id, limit)
