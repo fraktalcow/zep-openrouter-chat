@@ -1,16 +1,22 @@
 from typing import Any, Dict, List, Optional
 import asyncio
-
 from zep_cloud.client import AsyncZep
 from zep_cloud.types.edge_type import EdgeType
 from zep_cloud.types.entity_type import EntityType
 from zep_cloud.types.message import Message
 
+from config import get_settings
+
 class ZepService:
-    def __init__(self, api_key: str, base_url: Optional[str] = None):
-        # zep_cloud SDK doesn't use base_url for cloud instances
-        self.client = AsyncZep(api_key=api_key)
+    def __init__(self):
+        settings = get_settings()
+        self.api_key = settings.ZEP_API_KEY
+        # Lazy initialization of client can happen here or on first use.
+        # AsyncZep client init is usually just local config, so it's safe here 
+        # as long as we don't make network calls.
+        self.client = AsyncZep(api_key=self.api_key)
         self._ontology_applied = False
+
 
     async def ensure_ontology(self, entities: List[Dict[str, str]], edges: List[Dict[str, str]]) -> None:
         """Apply a custom ontology once so the KG starts with useful types."""
@@ -89,6 +95,7 @@ class ZepService:
             print(f"Session {session_id} created for user {user_id}")
         except Exception as e:
             print(f"Error creating session: {e}")
+            raise e  # Re-raise so the caller knows it failed
 
     async def add_memory(self, session_id: str, role: str, content: str) -> None:
         message = Message(
@@ -208,7 +215,7 @@ class ZepService:
     async def check_status(self):
         try:
             # Simple health check
-            await self.client.user.list_ordered(limit=1)
+            await self.client.user.list_ordered(page_size=1)
             return True
         except Exception as e:
             print(f"Status check failed: {e}")
@@ -323,29 +330,18 @@ class ZepService:
             print(f"Error listing sessions: {e}")
             return []
 
+
     async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """
         Get session details. 
-        Since we map session <-> user, we need to find the user for this session 
-        OR we just assume we can't look up by session_id easily without an index.
-        
-        BUT, we probably have the User ID > Session ID mapping.
-        If we don't, we can't easily implement 'get_session(session_id)' without the local DB.
-        
-        Workaround: Store session_id as the User ID? 
-        The current app uses unique User IDs per session.
-        user_id = request.user_id or f"user_{uuid...}"
-        session_id = f"session_{uuid...}"
-        
-        If we made user_id == session_id, this would be easier. 
-        But assuming we want to keep distinct IDs:
-         We should use the session_list to find the user.
         """
-        # Efficient lookup by session_id is hard without local DB if we don't map exact IDs.
-        # But we can try to look fetching the thread directly.
         try:
+            print(f"Debug: Fetching thread {session_id}")
             thread = await self.client.thread.get(session_id)
+            print(f"Debug: Thread found: {thread}")
+            
             user_id = getattr(thread, "user_id", None)
+            print(f"Debug: Thread user_id: {user_id}")
             
             if user_id:
                 user = await self.client.user.get(user_id)
@@ -360,8 +356,12 @@ class ZepService:
                     "business_data": meta.get("business_data", ""),
                     "created_at": getattr(user, "created_at", ""),
                 }
+            else:
+                 print("Debug: No user_id in thread")
         except Exception as e:
             print(f"Error getting session {session_id}: {e}")
+            import traceback
+            traceback.print_exc()
         return None
     
     async def delete_session(self, session_id: str) -> bool:
@@ -382,3 +382,13 @@ class ZepService:
         except Exception as e:
             print(f"Error deleting session: {e}")
             return False
+
+# Singleton instance
+_zep_service: Optional[ZepService] = None
+
+def get_zep_service() -> ZepService:
+    """Get or create Zep service instance."""
+    global _zep_service
+    if _zep_service is None:
+        _zep_service = ZepService()
+    return _zep_service

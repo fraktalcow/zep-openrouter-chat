@@ -21,7 +21,6 @@ document.addEventListener("DOMContentLoaded", () => {
         initSession(),
         fetchSchema(),
         populateModels(),
-        populateEmbeddingModels(),
     ]).catch(console.error);
 
     setupEventListeners();

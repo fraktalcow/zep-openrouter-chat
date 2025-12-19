@@ -68,29 +68,34 @@ def init_services(zep: ZepService, openrouter: OpenRouterService):
     openrouter_service = openrouter
 
 
-async def _stream_chat_response(request: ChatRequest):
+async def _stream_chat_response(request: ChatRequest, background_tasks: BackgroundTasks):
     """
     Internal generator for streaming chat responses.
     Yields SSE-formatted data chunks.
     """
-    # Get session from Zep
-    session_meta = await zep_service.get_session(request.session_id)
-    if not session_meta:
-        yield f"data: {json.dumps({'error': 'Unknown session. Create one first.'})}\n\n"
-        return
-
     context_sections = {"memory_section": "", "graph_section": "", "rag_section": ""}
     rag_chunks = []
+    session_meta = None
     
-    # Send extraction status
-    yield f"data: {json.dumps({'type': 'step', 'id': 'retrieval', 'message': 'Retrieving context & memory...'})}\n\n"
+    # Only get session if Zep services are enabled
+    if request.use_memory or request.use_retrieval:
+        try:
+            session_meta = await asyncio.wait_for(zep_service.get_session(request.session_id), timeout=5.0)
+            if not session_meta:
+                print(f"[Chat] Session {request.session_id} not found in Zep. Proceeding without memory.")
+        except Exception as e:
+            print(f"[Chat] Session retrieval failed: {e}. Proceeding without memory.")
+            session_meta = None
+            
+        if session_meta:
+            yield f"data: {json.dumps({'type': 'step', 'id': 'retrieval', 'message': 'Retrieving context & memory...'})}\n\n"
 
     # --- Parallel Retrieval ---
     loop = asyncio.get_running_loop()
     tasks = {}
 
-    # 1. Zep Context Task
-    if request.use_memory or request.use_retrieval:
+    # 1. Zep Context Task (only if session exists)
+    if session_meta:
         tasks['zep'] = zep_service.build_context_block(
             session_id=request.session_id,
             user_id=session_meta.get("user_id"),
@@ -109,7 +114,17 @@ async def _stream_chat_response(request: ChatRequest):
         )
     
     # Await all tasks
-    results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+    print(f"[Chat] Starting retrieval tasks: {list(tasks.keys())}")
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(*tasks.values(), return_exceptions=True),
+            timeout=10.0
+        )
+        print("[Chat] Retrieval tasks complete")
+    except asyncio.TimeoutError:
+        print("[Chat] Retrieval timed out")
+        results = [TimeoutError("Retrieval timed out")] * len(tasks)
+    
     results_map = dict(zip(tasks.keys(), results))
 
     # Process Zep Results
@@ -145,18 +160,27 @@ async def _stream_chat_response(request: ChatRequest):
             else:
                  yield f"data: {json.dumps({'type': 'step', 'id': 'rag_empty', 'message': 'No relevant RAG chunks.'})}\n\n"
 
-    # Build full prompt
-    prompt = DEFAULT_CONTEXT_TEMPLATE.format(
-        session_id=request.session_id,
-        user_name=f"{session_meta['first_name']} {session_meta['last_name']}",
-        preferences=session_meta.get("preferences") or "Not provided",
-        traits=session_meta.get("traits") or "Not provided",
-        business_data=session_meta.get("business_data") or "Not provided",
-        memory_section=context_sections["memory_section"],
-        graph_section=context_sections["graph_section"],
-        rag_section=context_sections["rag_section"],  # Added param to template
-        query=request.message,
-    )
+
+    # Build prompt - simple if no session, full context if session exists
+    if session_meta:
+        prompt = DEFAULT_CONTEXT_TEMPLATE.format(
+            session_id=request.session_id,
+            user_name=f"{session_meta['first_name']} {session_meta['last_name']}",
+            preferences=session_meta.get("preferences") or "Not provided",
+            traits=session_meta.get("traits") or "Not provided",
+            business_data=session_meta.get("business_data") or "Not provided",
+            memory_section=context_sections["memory_section"],
+            graph_section=context_sections["graph_section"],
+            rag_section=context_sections["rag_section"],
+            query=request.message,
+        )
+    else:
+        # Simple prompt without session context
+        prompt = request.message
+    
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[Chat] Prompt ready, length={len(prompt)}, use_ai={request.use_ai}, model={request.model_name}")
     
     # Send context debug info
     yield f"data: {json.dumps({'type': 'context', 'context_block': {'sections': context_sections}})}\n\n"
@@ -164,27 +188,30 @@ async def _stream_chat_response(request: ChatRequest):
     # 3. LLM Generation -> Answer
     if request.use_ai:
         yield f"data: {json.dumps({'type': 'step', 'id': 'llm', 'message': 'Generating answer...'})}\n\n"
+        logger.info(f"[Chat] Starting LLM stream with model: {request.model_name}")
         
+        full_response = ""
         try:
-            full_response = ""
             async for chunk in openrouter_service.generate_response_stream(
                 prompt,
                 model_name=request.model_name,
                 temperature=request.temperature,
                 max_tokens=request.max_tokens
             ):
+                print(f"[Chat] Yielding chunk: {len(chunk)} chars")
                 full_response += chunk
                 yield f"data: {json.dumps({'type': 'content', 'chunk': chunk})}\n\n"
             
-            # Save response to memory (Background? No, zep_service is async, can we BG it?)
-            # We can't access `background_tasks` here easily unless we pass it down. 
-            # StreamingResponse logic ends here. We can fire-and-forget task.
-            if request.use_memory or request.use_retrieval:
-                 asyncio.create_task(zep_service.add_memory(request.session_id, "assistant", full_response))
+            logger.info(f"[Chat] LLM complete, response_len={len(full_response)}")
+            
+            # Save response to memory (only if session exists)
+            if session_meta and (request.use_memory or request.use_retrieval):
+                 background_tasks.add_task(zep_service.add_memory, request.session_id, "assistant", full_response)
             
             yield f"data: {json.dumps({'type': 'done', 'response': full_response})}\n\n"
             
         except Exception as e:
+            logger.error(f"[Chat] LLM error: {e}")
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
     else:
         response_text = "AI API is disabled. Context block generated."
@@ -196,16 +223,18 @@ async def _stream_chat_response(request: ChatRequest):
 async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     """Chat endpoint with streaming SSE response."""
     
-    # Add user message to memory in background to unblock retrieval
+    # Add user message to memory in background
     if request.use_memory or request.use_retrieval:
         background_tasks.add_task(zep_service.add_memory, request.session_id, "user", request.message)
 
     return StreamingResponse(
-        _stream_chat_response(request),
+        _stream_chat_response(request, background_tasks),
         media_type="text/event-stream",
+        background=background_tasks,
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         }
     )
+

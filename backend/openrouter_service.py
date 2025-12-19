@@ -1,178 +1,51 @@
-from typing import Optional, List, Dict, Any
+"""OpenRouter API Service - Chat Completions API"""
+import logging
+import json
+from typing import Optional, List, Dict, Any, AsyncGenerator
 import httpx
 from datetime import datetime, timedelta
 
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+
+from config import get_settings
 
 class OpenRouterService:
-    """Service for interacting with OpenRouter API to access multiple AI models."""
+    """Service for interacting with OpenRouter Chat Completions API."""
     
-    # Cache for models list
+    BASE_URL = "https://openrouter.ai/api/v1"
     _models_cache: Optional[List[Dict[str, Any]]] = None
     _cache_timestamp: Optional[datetime] = None
-    _cache_duration = timedelta(hours=1)  # Cache for 1 hour
+    _cache_duration = timedelta(hours=1)
     
-    def __init__(
-        self,
-        api_key: str,
-        model_name: str = "meta-llama/llama-3.2-3b-instruct:free",
-        system_instruction: Optional[str] = None,
-    ):
-        if not api_key:
-            raise RuntimeError("OPENROUTER_API_KEY is missing")
+    def __init__(self):
+        settings = get_settings()
+        self.api_key = settings.OPENROUTER_API_KEY
+        if not self.api_key:
+            logger.warning("OPENROUTER_API_KEY is missing")
         
-        self.api_key = api_key
-        self.model_name = model_name
-        self.system_instruction = system_instruction or "You are a helpful agent that fuses Zep memory with AI reasoning."
-        self.base_url = "https://openrouter.ai/api/v1"
+        self.model_name = settings.DEFAULT_MODEL
+        self.system_instruction = "You are a smart assistant."
+        
+        logger.info(f"[OpenRouter] Initialized | default_model={self.model_name}")
+
     
-    async def fetch_all_models(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
-        """
-        Fetch all available models from OpenRouter API.
-        Results are cached for 1 hour to avoid excessive API calls.
-        
-        Args:
-            force_refresh: Force refresh the cache
-            
-        Returns:
-            List of model dictionaries with id, name, pricing, context length, etc.
-        """
-        # Check cache
-        if not force_refresh and self._models_cache and self._cache_timestamp:
-            if datetime.now() - self._cache_timestamp < self._cache_duration:
-                return self._models_cache
-        
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(
-                    f"{self.base_url}/models",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                    }
-                )
-                
-                response.raise_for_status()
-                data = response.json()
-                
-                # Extract and format models
-                models = []
-                if "data" in data:
-                    for model in data["data"]:
-                        models.append({
-                            "id": model.get("id", ""),
-                            "name": model.get("name", model.get("id", "")),
-                            "description": model.get("description", ""),
-                            "context_length": model.get("context_length", 0),
-                            "pricing": model.get("pricing", {}),
-                            "top_provider": model.get("top_provider", {}),
-                            "architecture": model.get("architecture", {}),
-                        })
-                
-                # Update cache
-                self._models_cache = models
-                self._cache_timestamp = datetime.now()
-                
-                return models
-                
-        except Exception as e:
-            print(f"Error fetching models from OpenRouter: {str(e)}")
-            # Return cached data if available, even if expired
-            if self._models_cache:
-                return self._models_cache
-            return []
+    def _get_headers(self) -> Dict[str, str]:
+        """Standard headers for OpenRouter API."""
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/zep-chat",
+            "X-Title": "Zep Knowledge Graph Chat",
+        }
     
-    async def search_models(
-        self, 
-        query: str = "", 
-        free_only: bool = False,
-        limit: int = 50
-    ) -> List[Dict[str, Any]]:
-        """
-        Search and filter models by name/description.
-        
-        Args:
-            query: Search query to filter models (case-insensitive)
-            free_only: Only return free models (pricing.prompt = "0")
-            limit: Maximum number of results to return
-            
-        Returns:
-            Filtered list of models matching the search criteria
-        """
-        all_models = await self.fetch_all_models()
-        
-        # Filter by query
-        if query:
-            query_lower = query.lower()
-            filtered = [
-                model for model in all_models
-                if query_lower in model["id"].lower() 
-                or query_lower in model["name"].lower()
-                or query_lower in model.get("description", "").lower()
-            ]
-        else:
-            filtered = all_models
-        
-        # Filter by free models
-        if free_only:
-            filtered = [
-                model for model in filtered
-                if (
-                    model.get("pricing", {}).get("prompt", "1") == "0"
-                    or ":free" in model["id"]
-                )
-            ]
-        
-        # Sort by relevance (exact matches first, then partial matches)
-        if query:
-            query_lower = query.lower()
-            filtered.sort(
-                key=lambda m: (
-                    0 if m["id"].lower() == query_lower else
-                    1 if m["id"].lower().startswith(query_lower) else
-                    2 if query_lower in m["name"].lower() else
-                    3
-                )
-            )
-        
-        return filtered[:limit]
-    
-    async def fetch_embedding_models(self) -> List[Dict[str, Any]]:
-        """
-        Fetch models that support embeddings from OpenRouter.
-        Filters models with 'embeddings' in their supported modalities.
-        """
-        all_models = await self.fetch_all_models()
-        
-        # Filter for embedding models
-        embedding_models = []
-        for model in all_models:
-            arch = model.get("architecture", {})
-            modality = arch.get("modality", "")
-            # Check if model supports embeddings
-            if "embedding" in model["id"].lower() or "embed" in modality.lower():
-                embedding_models.append({
-                    "id": model["id"],
-                    "name": model["name"],
-                    "description": model.get("description", ""),
-                    "pricing": model.get("pricing", {}),
-                })
-        
-        # Add known embedding models that might not be filtered
-        known_embeddings = [
-            "openai/text-embedding-3-small",
-            "openai/text-embedding-3-large", 
-            "openai/text-embedding-ada-002",
+    def _build_messages(self, prompt: str) -> List[Dict[str, str]]:
+        """Build messages array for Chat Completions API."""
+        return [
+            {"role": "system", "content": self.system_instruction},
+            {"role": "user", "content": prompt}
         ]
-        existing_ids = {m["id"] for m in embedding_models}
-        for known in known_embeddings:
-            if known not in existing_ids:
-                embedding_models.append({
-                    "id": known,
-                    "name": known.split("/")[-1],
-                    "description": "OpenAI embedding model",
-                    "pricing": {},
-                })
-        
-        return embedding_models
     
     async def generate_response(
         self, 
@@ -181,205 +54,251 @@ class OpenRouterService:
         temperature: float = 0.7,
         max_tokens: int = 1024
     ) -> str:
-        """
-        Generate a response using OpenRouter API.
+        """Non-streaming response generation."""
+        model = model_name or self.model_name
+        url = f"{self.BASE_URL}/chat/completions"
         
-        Args:
-            prompt: The user's prompt/query
-            model_name: Optional model override
-            temperature: Sampling temperature (0-2)
-            max_tokens: Maximum tokens to generate
-            
-        Returns:
-            Generated response text
-        """
+        payload = {
+            "model": model,
+            "messages": self._build_messages(prompt),
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": False,
+        }
+        
+        logger.info(f"[OpenRouter] POST {url}")
+        logger.debug(f"[OpenRouter] Payload: model={model}, temp={temperature}, max_tokens={max_tokens}")
+        
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                # Prepare messages
-                messages = [
-                    {"role": "system", "content": self.system_instruction},
-                    {"role": "user", "content": prompt}
-                ]
+                response = await client.post(url, headers=self._get_headers(), json=payload)
                 
-                # Make request to OpenRouter
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "HTTP-Referer": "https://github.com/zep-chat",
-                        "X-Title": "Zep Knowledge Graph Chat",
-                    },
-                    json={
-                        "model": model_name or self.model_name,
-                        "messages": messages,
-                        "temperature": temperature,
-                        "max_tokens": max_tokens,
-                    }
-                )
+                logger.info(f"[OpenRouter] Status: {response.status_code}")
+                logger.debug(f"[OpenRouter] Response: {response.text[:500]}...")
                 
                 response.raise_for_status()
                 data = response.json()
                 
-                # Extract response
+                # Parse Chat Completions response format
                 if "choices" in data and len(data["choices"]) > 0:
-                    return data["choices"][0]["message"]["content"]
-                else:
-                    return "I was unable to compose a response."
-                    
-        except httpx.HTTPStatusError as e:
-            error_msg = str(e)
-            print(f"HTTP Error from OpenRouter: {error_msg}")
-            
-            if e.response.status_code == 429:
-                return "⚠️ Error: Rate limit exceeded. Please try again in a moment."
-            elif e.response.status_code == 402:
-                return "⚠️ Error: Insufficient credits. Please check your OpenRouter account."
-            elif e.response.status_code == 401:
-                return "⚠️ Error: Invalid API key. Please check your OPENROUTER_API_KEY."
-            elif e.response.status_code == 404:
-                return "⚠️ Error: No endpoints matching your data policy for this model. Try a different model."
-            else:
-                error_details = e.response.text
-                return f"⚠️ HTTP Error {e.response.status_code}: {error_msg}\nDetails: {error_details}"
+                    content = data["choices"][0].get("message", {}).get("content", "")
+                    logger.info(f"[OpenRouter] Success | response_len={len(content)}")
+                    return content
                 
+                logger.warning(f"[OpenRouter] Unexpected format: {list(data.keys())}")
+                return "Error: Unexpected response format"
+                
+        except httpx.HTTPStatusError as e:
+            logger.error(f"[OpenRouter] HTTP {e.response.status_code}: {e.response.text}")
+            return self._format_http_error(e)
         except httpx.TimeoutException:
-            return "⚠️ Error: Request timed out. Please try again."
-            
+            logger.error("[OpenRouter] Timeout")
+            return "⚠️ Request timed out. Please retry."
         except Exception as e:
-            error_msg = str(e)
-            print(f"Error generating response from OpenRouter: {error_msg}")
-            return f"⚠️ Error generating response: {error_msg}"
-
+            logger.exception(f"[OpenRouter] Exception: {e}")
+            return f"⚠️ Error: {e}"
+    
     async def generate_response_stream(
         self,
         prompt: str,
         model_name: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 1024
-    ):
+    ) -> AsyncGenerator[str, None]:
         """
-        Stream a response using OpenRouter API with SSE.
-        Yields content chunks as they arrive.
+        Stream response using Chat Completions API.
+        Per OpenRouter docs: uses 'delta.content' for streaming chunks.
+        """
+        model = model_name or self.model_name
+        url = f"{self.BASE_URL}/chat/completions"
         
-        Yields:
-            str: Content chunks from the streaming response
-        """
-        import json
+        payload = {
+            "model": model,
+            "messages": self._build_messages(prompt),
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+        
+        logger.info(f"[OpenRouter] STREAM POST {url}")
+        logger.info(f"[OpenRouter] model={model} | temp={temperature} | max_tokens={max_tokens}")
+        logger.debug(f"[OpenRouter] Full payload: {json.dumps(payload, indent=2)}")
         
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
-                messages = [
-                    {"role": "system", "content": self.system_instruction},
-                    {"role": "user", "content": prompt}
-                ]
-                
-                async with client.stream(
-                    "POST",
-                    f"{self.base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "HTTP-Referer": "https://github.com/zep-chat",
-                        "X-Title": "Zep Knowledge Graph Chat",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": model_name or self.model_name,
-                        "messages": messages,
-                        "temperature": temperature,
-                        "max_tokens": max_tokens,
-                        "stream": True,
-                    }
-                ) as response:
-                    response.raise_for_status()
+                async with client.stream("POST", url, headers=self._get_headers(), json=payload) as response:
                     
-                    # Read raw bytes to avoid any text decoding buffering
-                    buffer = b""
-                    async for chunk_bytes in response.aiter_bytes():
-                        if not chunk_bytes:
+                    logger.info(f"[OpenRouter] Stream status: {response.status_code}")
+                    
+                    if response.status_code != 200:
+                        body = await response.aread()
+                        error_text = body.decode()
+                        logger.error(f"[OpenRouter] Stream error: {error_text}")
+                        yield f"⚠️ API Error ({response.status_code}): {error_text}"
+                        return
+                    
+                    chunk_count = 0
+                    async for line in response.aiter_lines():
+                        # Skip empty lines
+                        if not line:
                             continue
                         
-                        buffer += chunk_bytes
+                        # SSE format: "data: {...}"
+                        if not line.startswith("data:"):
+                            logger.debug(f"[OpenRouter] Skipping non-data line: {line[:50]}")
+                            continue
                         
-                        # Process complete SSE lines (ending with \n)
-                        while b'\n' in buffer:
-                            line_end = buffer.find(b'\n')
-                            line_bytes = buffer[:line_end]
-                            buffer = buffer[line_end + 1:]
-                            
-                            if not line_bytes.strip():
-                                continue
-                            
-                            try:
-                                line = line_bytes.decode('utf-8').strip()
-                                
-                                # Handle SSE format: "data: {...}" or "data: [DONE]"
-                                if line.startswith('data: '):
-                                    data_str = line[6:]  # Remove "data: " prefix
-                                    
-                                    if data_str == '[DONE]':
-                                        return
-                                    
-                                    try:
-                                        data_obj = json.loads(data_str)
-                                        # Handle OpenAI-compatible streaming format
-                                        if "choices" in data_obj and len(data_obj["choices"]) > 0:
-                                            delta = data_obj["choices"][0].get("delta", {})
-                                            content = delta.get("content")
-                                            if content:
-                                                # Yield immediately - this is real streaming data from OpenRouter
-                                                yield content
-                                    except (json.JSONDecodeError, KeyError, IndexError):
-                                        # Skip malformed chunks, continue streaming
-                                        continue
-                            except UnicodeDecodeError:
-                                # Skip invalid UTF-8, continue with next chunk
-                                continue
-                    
-                    # Process any remaining buffer content
-                    if buffer.strip():
+                        data_str = line[5:].strip()  # Remove "data:" prefix
+                        
+                        # End of stream marker
+                        if data_str == "[DONE]":
+                            logger.info(f"[OpenRouter] Stream complete | chunks={chunk_count}")
+                            return
+                        
                         try:
-                            remaining = buffer.decode('utf-8').strip()
-                            if remaining.startswith('data: '):
-                                data_str = remaining[6:]
-                                if data_str != '[DONE]':
-                                    try:
-                                        data_obj = json.loads(data_str)
-                                        if "choices" in data_obj and len(data_obj["choices"]) > 0:
-                                            delta = data_obj["choices"][0].get("delta", {})
-                                            content = delta.get("content")
-                                            if content:
-                                                yield content
-                                    except (json.JSONDecodeError, KeyError, IndexError):
-                                        pass
-                        except UnicodeDecodeError:
-                            pass
+                            event = json.loads(data_str)
+                            
+                            # Check for errors in event
+                            if "error" in event:
+                                err = event["error"]
+                                err_msg = err.get("message", str(err))
+                                logger.error(f"[OpenRouter] Event error: {err_msg}")
+                                yield f"⚠️ {err_msg}"
+                                return
+                            
+                            # Standard Chat Completions streaming format:
+                            # choices[0].delta.content contains the text chunk
+                            choices = event.get("choices", [])
+                            if choices:
+                                delta = choices[0].get("delta", {})
+                                content = delta.get("content")
+                                
+                                if content:
+                                    chunk_count += 1
+                                    logger.debug(f"[OpenRouter] Chunk {chunk_count}: {repr(content[:30])}")
+                                    yield content
+                                
+                                # Check for finish reason
+                                finish = choices[0].get("finish_reason")
+                                if finish:
+                                    logger.info(f"[OpenRouter] Finish reason: {finish}")
                                     
-
-        except httpx.HTTPStatusError as e:
-            error_msg = str(e)
-            print(f"HTTP Error from OpenRouter streaming: {error_msg}")
-            
-            if e.response.status_code == 429:
-                error_msg = "⚠️ Error: Rate limit exceeded. Please try again in a moment."
-            elif e.response.status_code == 402:
-                error_msg = "⚠️ Error: Insufficient credits. Please check your OpenRouter account."
-            elif e.response.status_code == 401:
-                error_msg = "⚠️ Error: Invalid API key. Please check your OPENROUTER_API_KEY."
-            elif e.response.status_code == 404:
-                error_msg = "⚠️ Error: No endpoints matching your data policy for this model. Try a different model."
-            else:
-                error_msg = f"⚠️ HTTP Error {e.response.status_code}: {error_msg}"
-            
-            raise Exception(error_msg)
-            
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"[OpenRouter] JSON decode error: {e} | line: {data_str[:100]}")
+                            continue
+                            
         except httpx.TimeoutException:
-            error_msg = "⚠️ Error: Request timed out. Please try again."
-            print(f"Timeout from OpenRouter streaming: {error_msg}")
-            raise Exception(error_msg)
-            
+            logger.error("[OpenRouter] Stream timeout")
+            yield "⚠️ Request timed out"
         except Exception as e:
-            error_msg = str(e)
-            print(f"Error in OpenRouter streaming: {error_msg}")
-            if not error_msg.startswith("⚠️"):
-                error_msg = f"⚠️ Error generating response: {error_msg}"
-            raise Exception(error_msg)
+            logger.exception(f"[OpenRouter] Stream exception: {e}")
+            yield f"⚠️ Error: {e}"
+    
+    def _format_http_error(self, e: httpx.HTTPStatusError) -> str:
+        """Format HTTP errors with helpful messages."""
+        status = e.response.status_code
+        error_text = e.response.text
+        
+        # Check for specific Data Policy error
+        if status == 404 and "data policy" in error_text:
+             return (
+                 "⚠️ OpenRouter Data Policy Error: Free models require enabling data training.\n"
+                 "Please go to https://openrouter.ai/settings/privacy and enable 'Allow inputs to be used for model improvement'."
+             )
+
+        error_map = {
+            401: "Invalid API key. Check OPENROUTER_API_KEY.",
+            402: "Insufficient credits. Check your OpenRouter account.",
+            429: "Rate limit exceeded. Please wait and retry.",
+            404: "Model not found or not available.",
+        }
+        base_msg = error_map.get(status, f"HTTP {status}")
+        return f"⚠️ {base_msg}\nDetails: {error_text[:200]}"
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # Model Discovery Methods (unchanged)
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    async def fetch_all_models(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
+        """Fetch all available models from OpenRouter API (cached for 1 hour)."""
+        if not force_refresh and self._models_cache and self._cache_timestamp:
+            if datetime.now() - self._cache_timestamp < self._cache_duration:
+                return self._models_cache
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self.BASE_URL}/models",
+                    headers={"Authorization": f"Bearer {self.api_key}"}
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                models = []
+                for m in data.get("data", []):
+                    models.append({
+                        "id": m.get("id", ""),
+                        "name": m.get("name", m.get("id", "")),
+                        "description": m.get("description", ""),
+                        "context_length": m.get("context_length", 0),
+                        "pricing": m.get("pricing", {}),
+                        "top_provider": m.get("top_provider", {}),
+                        "architecture": m.get("architecture", {}),
+                    })
+                
+                self._models_cache = models
+                self._cache_timestamp = datetime.now()
+                logger.info(f"[OpenRouter] Cached {len(models)} models")
+                return models
+                
+        except Exception as e:
+            logger.error(f"[OpenRouter] fetch_all_models error: {e}")
+            return self._models_cache or []
+    
+    async def search_models(
+        self, 
+        query: str = "", 
+        free_only: bool = False,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """Search and filter models by name/description."""
+        all_models = await self.fetch_all_models()
+        
+        filtered = all_models
+        if query:
+            q = query.lower()
+            filtered = [m for m in filtered if q in m["id"].lower() or q in m["name"].lower()]
+        
+        if free_only:
+            filtered = [m for m in filtered if m.get("pricing", {}).get("prompt") == "0" or ":free" in m["id"]]
+        
+        return filtered[:limit]
+    
+    async def fetch_embedding_models(self) -> List[Dict[str, Any]]:
+        """Fetch models that support embeddings."""
+        all_models = await self.fetch_all_models()
+        
+        embedding_models = [
+            {"id": m["id"], "name": m["name"], "description": m.get("description", ""), "pricing": m.get("pricing", {})}
+            for m in all_models
+            if "embedding" in m["id"].lower() or "embed" in m.get("architecture", {}).get("modality", "").lower()
+        ]
+        
+        # Add known embedding models
+        known = ["openai/text-embedding-3-small", "openai/text-embedding-3-large", "openai/text-embedding-ada-002"]
+        existing = {m["id"] for m in embedding_models}
+        for k in known:
+            if k not in existing:
+                embedding_models.append({"id": k, "name": k.split("/")[-1], "description": "OpenAI embedding", "pricing": {}})
+        
+        return embedding_models
+
+# Singleton instance
+_openrouter_service: Optional[OpenRouterService] = None
+
+def get_openrouter_service() -> OpenRouterService:
+    """Get or create OpenRouter service instance."""
+    global _openrouter_service
+    if _openrouter_service is None:
+        _openrouter_service = OpenRouterService()
+    return _openrouter_service

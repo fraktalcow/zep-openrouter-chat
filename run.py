@@ -26,32 +26,30 @@ def main():
     env["PATH"] = f"{venv_bin}{os.pathsep}{env.get('PATH', '')}"
     env.pop("PYTHONHOME", None)
 
+
+    # Check for venv
+    if not os.path.exists(venv_dir):
+        print(f"❌ Error: Virtual environment not found at {venv_dir}")
+        print("Please run 'python3 -m venv .venv' and install dependencies first.")
+        sys.exit(1)
+        
     print(f"Project root: {root_dir}")
     
-    # Check for uv
-    if not os.path.exists(uv_exe):
-        print("uv not found in .venv or system, bootstrapping...")
-        if not os.path.exists(venv_dir):
-            subprocess.run([sys.executable, "-m", "venv", ".venv"], check=True)
-        
-        pip_exe = os.path.join(venv_bin, "pip")
-        if os.path.exists(pip_exe):
-             subprocess.run([pip_exe, "install", "uv"], check=True)
-        else:
-             print("Error: pip not found in .venv and uv not installed on system.")
-             print("Please install uv manually: curling -LsSf https://astral.sh/uv/install.sh | sh")
-             sys.exit(1)
-
-    # Sync dependencies
-    print("Syncing dependencies with uv...")
-    try:
-        subprocess.run([uv_exe, "sync"], cwd=root_dir, env=env, check=True)
-    except subprocess.CalledProcessError:
-        print("Failed to sync dependencies.")
-        sys.exit(1)
+    # Sync dependencies if uv is available
+    if os.path.exists(uv_exe):
+        print("Syncing dependencies with uv...")
+        try:
+            # We don't want to capture output unless error, to let user see progress
+            subprocess.run([uv_exe, "sync"], cwd=root_dir, env=env, check=True)
+            print("✅ Dependencies synced.")
+        except subprocess.CalledProcessError:
+            print("⚠️ Warning: Failed to sync dependencies with uv.")
+            print("Attempting to run server anyway...")
+    else:
+        print("ℹ️ uv not found, skipping dependency sync.")
 
     # Run server
-    print("Starting backend server (uvicorn)...")
+    print("\nStarting backend server (uvicorn)...")
     backend_dir = os.path.join(root_dir, "backend")
     
     try:
@@ -63,11 +61,12 @@ def main():
             check=True
         )
     except KeyboardInterrupt:
-        pass
+        print("\nStopping server...")
     except subprocess.CalledProcessError as e:
         sys.exit(e.returncode)
     except FileNotFoundError:
-        print(f"Error: uvicorn not found at {uvicorn_exe}")
+        print(f"❌ Error: uvicorn not found at {uvicorn_exe}")
+        print("Ensure 'uvicorn' is installed in your virtual environment.")
         sys.exit(1)
 
 if __name__ == "__main__":

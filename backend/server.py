@@ -37,18 +37,20 @@ async def read_index():
     return FileResponse(FRONTEND_DIR / "index.html")
 
 
-# Initialize services using validated config
-settings = get_settings()
-zep_service = ZepService(settings.ZEP_API_KEY)
-openrouter_service = OpenRouterService(settings.OPENROUTER_API_KEY)
+# Initialize services using lazy getters (services are lightweight until used)
+from zep_service import get_zep_service
+from openrouter_service import get_openrouter_service
+from pinecone_service import get_pinecone_service
 
-# Initialize route services (sessions now use SQLite - no in-memory dict needed)
-init_chat_services(zep_service, openrouter_service)
-init_session_services(zep_service)
-init_schema_services(zep_service)
-init_models_services(openrouter_service)
-init_graph_services(zep_service)
-init_memory_services(zep_service)
+# Initialize route services
+# NOTE: These init functions inject the service instances into the route modules.
+# Since __init__ is now lazy/lightweight, this is safe to do at startup.
+init_chat_services(get_zep_service(), get_openrouter_service())
+init_session_services(get_zep_service())
+init_schema_services(get_zep_service())
+init_models_services(get_openrouter_service())
+init_graph_services(get_zep_service())
+init_memory_services(get_zep_service())
 
 # Register API routes
 app.include_router(api_router)
@@ -56,8 +58,10 @@ app.include_router(api_router)
 
 @app.on_event("startup")
 async def startup_event():
-    schema = load_schema()
-    await zep_service.ensure_ontology(schema["entities"], schema["edges"])
+    # We delay strict ontology checks to allow offline start.
+    # Frontend will toggle features.
+    print("Server started. Services ready for lazy initialization.")
+
 
 
 if __name__ == "__main__":

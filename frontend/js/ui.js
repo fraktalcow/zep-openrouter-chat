@@ -180,3 +180,65 @@ export function renderRagSources(sources) {
     return div;
 }
 
+/**
+ * Show a toast notification for important messages (errors, status codes).
+ * @param {string} message - Message to display
+ * @param {"error"|"warning"|"info"} type - Toast type
+ * @param {number} duration - Display duration in ms (0 = stays until dismissed)
+ */
+export function showToast(message, type = "error", duration = 5000) {
+    // Remove existing toast if any
+    const existing = document.getElementById("toast-notification");
+    if (existing) existing.remove();
+    
+    const toast = document.createElement("div");
+    toast.id = "toast-notification";
+    
+    const bgColor = type === "error" ? "#f38ba8" : type === "warning" ? "#fab387" : "#89b4fa";
+    const textColor = "#1e1e2e";
+    
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 16px 24px;
+        background: ${bgColor};
+        color: ${textColor};
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 14px;
+        max-width: 400px;
+        z-index: 10000;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        cursor: pointer;
+        animation: slideIn 0.3s ease;
+    `;
+    
+    toast.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 18px;">${type === "error" ? "⚠️" : type === "warning" ? "⚡" : "ℹ️"}</span>
+            <span>${message}</span>
+            <span style="margin-left: auto; opacity: 0.7;">✕</span>
+        </div>
+    `;
+    
+    toast.onclick = () => toast.remove();
+    document.body.appendChild(toast);
+    
+    // Add animation keyframes if not exists
+    if (!document.getElementById("toast-styles")) {
+        const style = document.createElement("style");
+        style.id = "toast-styles";
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    if (duration > 0) {
+        setTimeout(() => toast.remove(), duration);
+    }
+}

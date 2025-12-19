@@ -88,13 +88,16 @@ async def create_session(request: SessionRequest):
     }
 
     # Create in Zep
-    await zep_service.create_session(
-        user_id,
-        session_id,
-        first_name=request.first_name,
-        last_name=request.last_name,
-        metadata=metadata,
-    )
+    try:
+        await zep_service.create_session(
+            user_id,
+            session_id,
+            first_name=request.first_name,
+            last_name=request.last_name,
+            metadata=metadata,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create session in Zep: {str(e)}")
 
     return {
         "session_id": session_id,

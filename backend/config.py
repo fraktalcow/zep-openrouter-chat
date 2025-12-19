@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     PINECONE_REGION: str = "us-east-1"
     
     # Model defaults
-    DEFAULT_MODEL: str = "google/gemini-2.0-flash-exp:free"
+    DEFAULT_MODEL: str = "meta-llama/llama-3.2-3b-instruct:free"
     DEFAULT_EMBEDDING_MODEL: str = "llama-text-embed-v2"
     
     # RAG config

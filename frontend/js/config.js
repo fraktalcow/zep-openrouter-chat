@@ -5,7 +5,7 @@
 
 export const CONFIG = {
     // Models
-    DEFAULT_MODEL: "google/gemini-2.0-flash-exp:free",
+    DEFAULT_MODEL: "meta-llama/llama-3.2-3b-instruct:free",
     FALLBACK_MODEL: "meta-llama/llama-3.2-3b-instruct:free",
     
     // Timing

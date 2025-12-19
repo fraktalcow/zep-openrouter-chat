@@ -105,8 +105,16 @@ export async function sendMessage(state) {
                         console.log("Context built:", data.context_block);
                     }
 
-                    // Content Streaming
+                    // Content Streaming - also check for API errors
                     else if (data.type === "content" && data.chunk) {
+                        // Check if chunk is an API error
+                        if (data.chunk.includes("⚠️") && data.chunk.includes("API Error")) {
+                            // Extract status code for toast
+                            const match = data.chunk.match(/API Error \((\d+)\)/);
+                            const statusCode = match ? match[1] : "Unknown";
+                            UI.showToast(`API Error ${statusCode}: Model rate-limited. Try a different model.`, "error", 8000);
+                        }
+                        
                         if (!assistantMsgEl) {
                             if (loadingMsgEl?.parentNode) loadingMsgEl.remove();
                             assistantMsgEl = UI.addMessage("assistant", "", modelName);
@@ -133,10 +141,23 @@ export async function sendMessage(state) {
                     
                     // Error
                     else if (data.type === "error") {
-                        throw new Error(data.error);
+                        UI.showToast(data.error, "error", 8000);
+                        if (data.error.includes("Unknown session")) {
+                             // Reset session state so user can create new one
+                             console.warn("Session invalid, resetting...");
+                             state.sessionId = null;
+                             state.userId = null;
+                             document.getElementById("session-badge").textContent = "ID: INVALID";
+                        }
+                        // Stop processing this stream
+                        throw new Error("API_ERROR: " + data.error);
                     }
                 } catch (e) {
-                    if (e.message !== "error") console.error("SSE parse error", e, line);
+                    // Ignore expected API errors that we threw ourselves
+                    if (e.message && e.message.startsWith("API_ERROR:")) {
+                        throw e; 
+                    }
+                    console.error("SSE parse error", e, line);
                 }
             }
         }
@@ -147,6 +168,7 @@ export async function sendMessage(state) {
     } catch (e) {
         if (loadingMsgEl?.parentNode) loadingMsgEl.remove();
         let errorText = `Error: ${e.message}`;
+        if (e.message.startsWith("API_ERROR:")) errorText = e.message.replace("API_ERROR: ", "⚠️ ");
         if (e.name === 'AbortError') errorText = "⚠️ Request timed out.";
         UI.addMessage("system", errorText);
     } finally {
