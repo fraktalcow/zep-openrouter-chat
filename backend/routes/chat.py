@@ -5,9 +5,10 @@ from pydantic import BaseModel, Field
 import json
 from textwrap import dedent
 
-from openrouter_service import OpenRouterService
-from zep_service import ZepService
+from openrouter_service import get_openrouter_service
+from zep_service import get_zep_service
 from pinecone_service import get_pinecone_service
+from logger import logger
 
 router = APIRouter()
 
@@ -56,16 +57,8 @@ class ChatRequest(BaseModel):
     max_tokens: int = Field(default=1024, ge=1, le=100000)
 
 
-# Injected by server.py
-zep_service: ZepService = None
-openrouter_service: OpenRouterService = None
+# Services are retrieved via singleton getters
 
-
-def init_services(zep: ZepService, openrouter: OpenRouterService):
-    """Initialize with services."""
-    global zep_service, openrouter_service
-    zep_service = zep
-    openrouter_service = openrouter
 
 
 async def _stream_chat_response(request: ChatRequest, background_tasks: BackgroundTasks):
@@ -77,14 +70,17 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
     rag_chunks = []
     session_meta = None
     
+    zep_service = get_zep_service()
+    openrouter_service = get_openrouter_service()
+    
     # Only get session if Zep services are enabled
     if request.use_memory or request.use_retrieval:
         try:
             session_meta = await asyncio.wait_for(zep_service.get_session(request.session_id), timeout=5.0)
             if not session_meta:
-                print(f"[Chat] Session {request.session_id} not found in Zep. Proceeding without memory.")
+                logger.warning(f"[Chat] Session {request.session_id} not found in Zep. Proceeding without memory.")
         except Exception as e:
-            print(f"[Chat] Session retrieval failed: {e}. Proceeding without memory.")
+            logger.warning(f"[Chat] Session retrieval failed: {e}. Proceeding without memory.")
             session_meta = None
             
         if session_meta:
@@ -114,15 +110,15 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
         )
     
     # Await all tasks
-    print(f"[Chat] Starting retrieval tasks: {list(tasks.keys())}")
+    logger.info(f"[Chat] Starting retrieval tasks: {list(tasks.keys())}")
     try:
         results = await asyncio.wait_for(
             asyncio.gather(*tasks.values(), return_exceptions=True),
             timeout=10.0
         )
-        print("[Chat] Retrieval tasks complete")
+        logger.info("[Chat] Retrieval tasks complete")
     except asyncio.TimeoutError:
-        print("[Chat] Retrieval timed out")
+        logger.warning("[Chat] Retrieval timed out")
         results = [TimeoutError("Retrieval timed out")] * len(tasks)
     
     results_map = dict(zip(tasks.keys(), results))
@@ -131,7 +127,7 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
     if 'zep' in results_map:
         res = results_map['zep']
         if isinstance(res, Exception):
-            print(f"Zep Error: {res}")
+            logger.error(f"Zep Error: {res}")
             context_sections["memory_section"] = "Error retrieving memory."
         else:
             context_sections["memory_section"] = res.get("memory_section", "")
@@ -141,7 +137,7 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
     if 'rag' in results_map:
         res = results_map['rag']
         if isinstance(res, Exception):
-             print(f"RAG Error: {res}")
+             logger.error(f"RAG Error: {res}")
              yield f"data: {json.dumps({'type': 'error', 'error': f'RAG Error: {str(res)}'})}\n\n"
         elif res:
             rag_texts = []
@@ -178,8 +174,6 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
         # Simple prompt without session context
         prompt = request.message
     
-    import logging
-    logger = logging.getLogger(__name__)
     logger.info(f"[Chat] Prompt ready, length={len(prompt)}, use_ai={request.use_ai}, model={request.model_name}")
     
     # Send context debug info
@@ -198,7 +192,7 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
                 temperature=request.temperature,
                 max_tokens=request.max_tokens
             ):
-                print(f"[Chat] Yielding chunk: {len(chunk)} chars")
+                logger.debug(f"[Chat] Yielding chunk: {len(chunk)} chars")
                 full_response += chunk
                 yield f"data: {json.dumps({'type': 'content', 'chunk': chunk})}\n\n"
             
@@ -225,7 +219,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     
     # Add user message to memory in background
     if request.use_memory or request.use_retrieval:
-        background_tasks.add_task(zep_service.add_memory, request.session_id, "user", request.message)
+        background_tasks.add_task(get_zep_service().add_memory, request.session_id, "user", request.message)
 
     return StreamingResponse(
         _stream_chat_response(request, background_tasks),

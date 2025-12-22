@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional
 from pinecone import Pinecone
 
 from config import get_settings
+from logger import logger
 
 
 class PineconeService:
@@ -39,7 +40,7 @@ class PineconeService:
                 )
             except Exception as e:
                 # Handle race condition or permission errors safely
-                print(f"Index creation warning: {e}")
+                logger.warning(f"Index creation warning: {e}")
                 
         self.index = self.pc.Index(self.index_name)
 

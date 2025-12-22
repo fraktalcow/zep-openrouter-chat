@@ -1,12 +1,10 @@
-"""OpenRouter API Service - Chat Completions API"""
-import logging
 import json
 from typing import Optional, List, Dict, Any, AsyncGenerator
 import httpx
 from datetime import datetime, timedelta
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+from logger import logger
+from config import get_settings
 
 
 from config import get_settings
@@ -284,7 +282,6 @@ class OpenRouterService:
             if "embedding" in m["id"].lower() or "embed" in m.get("architecture", {}).get("modality", "").lower()
         ]
         
-        # Add known embedding models
         known = ["openai/text-embedding-3-small", "openai/text-embedding-3-large", "openai/text-embedding-ada-002"]
         existing = {m["id"] for m in embedding_models}
         for k in known:

@@ -6,14 +6,12 @@ from zep_cloud.types.entity_type import EntityType
 from zep_cloud.types.message import Message
 
 from config import get_settings
+from logger import logger
 
 class ZepService:
     def __init__(self):
         settings = get_settings()
         self.api_key = settings.ZEP_API_KEY
-        # Lazy initialization of client can happen here or on first use.
-        # AsyncZep client init is usually just local config, so it's safe here 
-        # as long as we don't make network calls.
         self.client = AsyncZep(api_key=self.api_key)
         self._ontology_applied = False
 
@@ -44,9 +42,9 @@ class ZepService:
                 edge_types=valid_edges or None,
             )
             self._ontology_applied = True
-            print("Custom ontology applied to Zep graph")
+            logger.info("Custom ontology applied to Zep graph")
         except Exception as exc:
-            print(f"Error applying ontology: {exc}")
+            logger.error(f"Error applying ontology: {exc}")
             self._ontology_applied = True
 
     async def create_session(
@@ -76,7 +74,7 @@ class ZepService:
                 last_name=last_name,
                 metadata=metadata or {},
             )
-            print(f"User {user_id} created")
+            logger.info(f"User {user_id} created")
         except Exception:
             # User may already exist; swallow benign errors
             pass
@@ -92,9 +90,9 @@ class ZepService:
                 thread_id=session_id,
                 user_id=user_id,
             )
-            print(f"Session {session_id} created for user {user_id}")
+            logger.info(f"Session {session_id} created for user {user_id}")
         except Exception as e:
-            print(f"Error creating session: {e}")
+            logger.error(f"Error creating session: {e}")
             raise e  # Re-raise so the caller knows it failed
 
     async def add_memory(self, session_id: str, role: str, content: str) -> None:
@@ -107,15 +105,15 @@ class ZepService:
                 thread_id=session_id,
                 messages=[message],
             )
-            print(f"Memory added to session {session_id}")
+            logger.info(f"Memory added to session {session_id}")
         except Exception as e:
-            print(f"Error adding memory: {e}")
+            logger.error(f"Error adding memory: {e}")
 
     async def get_memory(self, session_id, lastn: int = 25):
         try:
             return await self.client.thread.get(thread_id=session_id, lastn=lastn)
         except Exception as e:
-            print(f"Error getting memory: {e}")
+            logger.error(f"Error getting memory: {e}")
             return None
 
     async def search_memory(self, session_id, query, limit=3):
@@ -126,7 +124,7 @@ class ZepService:
                 limit=limit,
             )
         except Exception as e:
-            print(f"Error searching memory: {e}")
+            logger.error(f"Error searching memory: {e}")
             return []
 
     async def get_graph_data(self, user_id, limit=100):
@@ -147,7 +145,7 @@ class ZepService:
                         "type": getattr(node, 'type', 'unknown')
                     })
             except Exception as e:
-                print(f"Error fetching nodes: {e}")
+                logger.error(f"Error fetching nodes: {e}")
             
             # Get edges
             edges_data = []
@@ -163,7 +161,7 @@ class ZepService:
                         "type": getattr(edge, 'type', 'unknown')
                     })
             except Exception as e:
-                print(f"Error fetching edges: {e}")
+                logger.error(f"Error fetching edges: {e}")
             
             return {
                 "nodes": nodes_data,
@@ -171,7 +169,7 @@ class ZepService:
                 "user_id": user_id
             }
         except Exception as e:
-            print(f"Error getting graph data: {e}")
+            logger.error(f"Error getting graph data: {e}")
             return {"nodes": [], "edges": [], "user_id": user_id}
 
     async def search_graph(
@@ -209,7 +207,7 @@ class ZepService:
                 combined.extend(results.episodes)
             return combined
         except Exception as e:
-            print(f"Error searching graph: {e}")
+            logger.error(f"Error searching graph: {e}")
             return []
 
     async def check_status(self):
@@ -218,7 +216,7 @@ class ZepService:
             await self.client.user.list_ordered(page_size=1)
             return True
         except Exception as e:
-            print(f"Status check failed: {e}")
+            logger.error(f"Status check failed: {e}")
             return False
 
 
@@ -327,7 +325,7 @@ class ZepService:
             return [s for s in sessions if s["session_id"] != "unknown"]
             
         except Exception as e:
-            print(f"Error listing sessions: {e}")
+            logger.error(f"Error listing sessions: {e}")
             return []
 
 
@@ -336,12 +334,12 @@ class ZepService:
         Get session details. 
         """
         try:
-            print(f"Debug: Fetching thread {session_id}")
+            logger.debug(f"Debug: Fetching thread {session_id}")
             thread = await self.client.thread.get(session_id)
-            print(f"Debug: Thread found: {thread}")
+            logger.debug(f"Debug: Thread found: {thread}")
             
             user_id = getattr(thread, "user_id", None)
-            print(f"Debug: Thread user_id: {user_id}")
+            logger.debug(f"Debug: Thread user_id: {user_id}")
             
             if user_id:
                 user = await self.client.user.get(user_id)
@@ -357,9 +355,9 @@ class ZepService:
                     "created_at": getattr(user, "created_at", ""),
                 }
             else:
-                 print("Debug: No user_id in thread")
+                logger.debug("Debug: No user_id in thread")
         except Exception as e:
-            print(f"Error getting session {session_id}: {e}")
+            logger.error(f"Error getting session {session_id}: {e}")
             import traceback
             traceback.print_exc()
         return None
@@ -380,7 +378,7 @@ class ZepService:
                 
             return True
         except Exception as e:
-            print(f"Error deleting session: {e}")
+            logger.error(f"Error deleting session: {e}")
             return False
 
 # Singleton instance

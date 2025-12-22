@@ -5,7 +5,7 @@ from typing import Dict, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from zep_service import ZepService
+from zep_service import get_zep_service
 
 router = APIRouter()
 
@@ -30,15 +30,6 @@ class SchemaRequest(BaseModel):
     edges: List[Dict[str, str]]
 
 
-# This will be injected by server.py
-zep_service: ZepService = None
-
-
-def init_services(zep: ZepService):
-    global zep_service
-    zep_service = zep
-
-
 def load_schema():
     schema_path = BASE_DIR / "schema.json"
     if not schema_path.exists():
@@ -61,6 +52,6 @@ async def update_schema(request: SchemaRequest):
     with open(schema_path, "w") as f:
         json.dump(schema, f, indent=2)
     
-    await zep_service.ensure_ontology(request.entities, request.edges)
+    await get_zep_service().ensure_ontology(request.entities, request.edges)
     return {"status": "success", "message": "Schema updated and ontology ensured."}
 

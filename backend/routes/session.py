@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from zep_service import ZepService
+from zep_service import get_zep_service
 
 router = APIRouter()
 
@@ -29,31 +29,17 @@ class SessionRequest(BaseModel):
     )
 
 
-# Injected by server.py
-zep_service: ZepService = None
-
-
-def init_services(zep: ZepService):
-    """Initialize with Zep service."""
-    global zep_service
-    zep_service = zep
-
-
 @router.get("/list")
 async def list_sessions():
     """List all saved sessions from Zep."""
-    if not zep_service:
-         raise HTTPException(status_code=503, detail="Service not initialized")
-    sessions = await zep_service.list_sessions()
+    sessions = await get_zep_service().list_sessions()
     return {"sessions": sessions}
 
 
 @router.get("/{session_id}")
 async def get_session(session_id: str):
     """Get a specific session by ID from Zep."""
-    if not zep_service:
-         raise HTTPException(status_code=503, detail="Service not initialized")
-    session = await zep_service.get_session(session_id)
+    session = await get_zep_service().get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return session
@@ -62,9 +48,7 @@ async def get_session(session_id: str):
 @router.delete("/{session_id}")
 async def delete_session(session_id: str):
     """Delete a session from Zep."""
-    if not zep_service:
-         raise HTTPException(status_code=503, detail="Service not initialized")
-    deleted = await zep_service.delete_session(session_id)
+    deleted = await get_zep_service().delete_session(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"status": "deleted", "session_id": session_id}
@@ -73,8 +57,6 @@ async def delete_session(session_id: str):
 @router.post("")
 async def create_session(request: SessionRequest):
     """Create a new session in Zep."""
-    if not zep_service:
-         raise HTTPException(status_code=503, detail="Service not initialized")
 
     user_id = request.user_id or f"user_{uuid.uuid4().hex[:8]}"
     session_id = f"session_{uuid.uuid4().hex[:8]}"
@@ -89,7 +71,7 @@ async def create_session(request: SessionRequest):
 
     # Create in Zep
     try:
-        await zep_service.create_session(
+        await get_zep_service().create_session(
             user_id,
             session_id,
             first_name=request.first_name,
