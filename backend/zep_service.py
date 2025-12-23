@@ -1,51 +1,17 @@
 from typing import Any, Dict, List, Optional
 import asyncio
 from zep_cloud.client import AsyncZep
-from zep_cloud.types.edge_type import EdgeType
-from zep_cloud.types.entity_type import EntityType
 from zep_cloud.types.message import Message
 
 from config import get_settings
 from logger import logger
+
 
 class ZepService:
     def __init__(self):
         settings = get_settings()
         self.api_key = settings.ZEP_API_KEY
         self.client = AsyncZep(api_key=self.api_key)
-        self._ontology_applied = False
-
-
-    async def ensure_ontology(self, entities: List[Dict[str, str]], edges: List[Dict[str, str]]) -> None:
-        """Apply a custom ontology once so the KG starts with useful types."""
-        if self._ontology_applied or not entities:
-            return
-
-        valid_entities = [
-            EntityType(name=item["name"], description=item["description"])
-            for item in entities
-            if item.get("name") and item.get("description")
-        ]
-        valid_edges = [
-            EdgeType(name=item["name"], description=item["description"])
-            for item in edges
-            if item.get("name") and item.get("description")
-        ]
-
-        if not valid_entities and not valid_edges:
-            self._ontology_applied = True
-            return
-
-        try:
-            await self.client.graph.set_entity_types_internal(
-                entity_types=valid_entities or None,
-                edge_types=valid_edges or None,
-            )
-            self._ontology_applied = True
-            logger.info("Custom ontology applied to Zep graph")
-        except Exception as exc:
-            logger.error(f"Error applying ontology: {exc}")
-            self._ontology_applied = True
 
     async def create_session(
         self,
@@ -53,12 +19,11 @@ class ZepService:
         session_id: str,
         *,
         first_name: str = "User",
-        last_name: str = "Guest",
-        metadata: Optional[Dict[str, Any]] = None,
+        last_name: str = "",
     ) -> None:
-        """Create the backing Zep user + memory session."""
-        await self._ensure_user(user_id, first_name, last_name, metadata)
-        await self._ensure_session(user_id, session_id, metadata)
+        """Create user + session in Zep."""
+        await self._ensure_user(user_id, first_name, last_name, {"session_id": session_id})
+        await self._ensure_session(user_id, session_id)
 
     async def _ensure_user(
         self,
@@ -76,101 +41,30 @@ class ZepService:
             )
             logger.info(f"User {user_id} created")
         except Exception:
-            # User may already exist; swallow benign errors
-            pass
+            pass  # User may already exist
 
-    async def _ensure_session(
-        self,
-        user_id: str,
-        session_id: str,
-        metadata: Optional[Dict[str, Any]],
-    ) -> None:
+    async def _ensure_session(self, user_id: str, session_id: str) -> None:
         try:
-            await self.client.thread.create(
-                thread_id=session_id,
-                user_id=user_id,
-            )
-            logger.info(f"Session {session_id} created for user {user_id}")
+            await self.client.thread.create(thread_id=session_id, user_id=user_id)
+            logger.info(f"Session {session_id} created")
         except Exception as e:
             logger.error(f"Error creating session: {e}")
-            raise e  # Re-raise so the caller knows it failed
+            raise
 
     async def add_memory(self, session_id: str, role: str, content: str) -> None:
-        message = Message(
-            role=role,
-            content=content,
-        )
         try:
             await self.client.thread.add_messages(
-                thread_id=session_id,
-                messages=[message],
+                thread_id=session_id, messages=[Message(role=role, content=content)]
             )
-            logger.info(f"Memory added to session {session_id}")
         except Exception as e:
             logger.error(f"Error adding memory: {e}")
 
-    async def get_memory(self, session_id, lastn: int = 25):
+    async def get_memory(self, session_id: str, lastn: int = 25):
         try:
             return await self.client.thread.get(thread_id=session_id, lastn=lastn)
         except Exception as e:
             logger.error(f"Error getting memory: {e}")
             return None
-
-    async def search_memory(self, session_id, query, limit=3):
-        try:
-            return await self.search_graph(
-                query=query,
-                user_id=None,
-                limit=limit,
-            )
-        except Exception as e:
-            logger.error(f"Error searching memory: {e}")
-            return []
-
-    async def get_graph_data(self, user_id, limit=100):
-        """
-        Retrieve knowledge graph nodes and edges for visualization.
-        """
-        try:
-            # Get nodes
-            nodes_data = []
-            try:
-                nodes = await self.client.graph.node.get_by_user_id(user_id=user_id, limit=limit)
-                for node in nodes:
-                    node_id = getattr(node, "uuid_", getattr(node, "uuid", None))
-                    nodes_data.append({
-                        "uuid": node_id,
-                        "name": node.name,
-                        "summary": getattr(node, 'summary', ''),
-                        "type": getattr(node, 'type', 'unknown')
-                    })
-            except Exception as e:
-                logger.error(f"Error fetching nodes: {e}")
-            
-            # Get edges
-            edges_data = []
-            try:
-                edges = await self.client.graph.edge.get_by_user_id(user_id=user_id, limit=limit)
-                for edge in edges:
-                    edge_id = getattr(edge, "uuid_", getattr(edge, "uuid", None))
-                    edges_data.append({
-                        "uuid": edge_id,
-                        "source": edge.source_node_uuid,
-                        "target": edge.target_node_uuid,
-                        "fact": getattr(edge, 'fact', ''),
-                        "type": getattr(edge, 'type', 'unknown')
-                    })
-            except Exception as e:
-                logger.error(f"Error fetching edges: {e}")
-            
-            return {
-                "nodes": nodes_data,
-                "edges": edges_data,
-                "user_id": user_id
-            }
-        except Exception as e:
-            logger.error(f"Error getting graph data: {e}")
-            return {"nodes": [], "edges": [], "user_id": user_id}
 
     async def search_graph(
         self,
@@ -180,9 +74,7 @@ class ZepService:
         limit: int = 3,
         search_scope: Optional[str] = None,
     ):
-        """
-        Searches the graph for relevant nodes and edges.
-        """
+        """Search graph for relevant nodes/edges."""
         if not query:
             return []
         params: Dict[str, Any] = {"query": query, "limit": limit}
@@ -196,29 +88,43 @@ class ZepService:
                 return results.edges or []
             if search_scope == "nodes":
                 return results.nodes or []
-            if search_scope == "episodes":
-                return results.episodes or []
             combined: List[Any] = []
             if results.edges:
                 combined.extend(results.edges)
             if results.nodes:
                 combined.extend(results.nodes)
-            if results.episodes:
-                combined.extend(results.episodes)
             return combined
         except Exception as e:
             logger.error(f"Error searching graph: {e}")
             return []
 
-    async def check_status(self):
+    async def get_graph_data(self, user_id: str, limit: int = 100):
+        """Get graph nodes and edges for visualization."""
+        nodes_data, edges_data = [], []
         try:
-            # Simple health check
-            await self.client.user.list_ordered(page_size=1)
-            return True
+            nodes = await self.client.graph.node.get_by_user_id(user_id=user_id, limit=limit)
+            for n in nodes:
+                nodes_data.append({
+                    "uuid": getattr(n, "uuid_", getattr(n, "uuid", None)),
+                    "name": n.name,
+                    "summary": getattr(n, "summary", ""),
+                    "type": getattr(n, "type", "unknown"),
+                })
         except Exception as e:
-            logger.error(f"Status check failed: {e}")
-            return False
-
+            logger.error(f"Error fetching nodes: {e}")
+        try:
+            edges = await self.client.graph.edge.get_by_user_id(user_id=user_id, limit=limit)
+            for e in edges:
+                edges_data.append({
+                    "uuid": getattr(e, "uuid_", getattr(e, "uuid", None)),
+                    "source": e.source_node_uuid,
+                    "target": e.target_node_uuid,
+                    "fact": getattr(e, "fact", ""),
+                    "type": getattr(e, "type", "unknown"),
+                })
+        except Exception as ex:
+            logger.error(f"Error fetching edges: {ex}")
+        return {"nodes": nodes_data, "edges": edges_data, "user_id": user_id}
 
     async def build_context_block(
         self,
@@ -231,43 +137,41 @@ class ZepService:
         max_messages: int = 6,
         graph_limit: int = 5,
     ) -> Dict[str, Any]:
-        """Return structured memory + graph context sections."""
-        context: Dict[str, Any] = {
-            "memory_section": "Memory disabled by user.",
-            "graph_section": "Graph retrieval disabled by user.",
-            "memory_messages": [],
-            "graph_facts": [],
-        }
+        """Build memory + graph context sections."""
+        context: Dict[str, Any] = {"memory_section": "", "graph_section": ""}
 
-        if include_memory and include_graph and user_id:
-            # Parallelize all 3 calls
-            memory_task = self.get_memory(session_id)
-            edges_task = self.search_graph(query, user_id=user_id, limit=graph_limit, search_scope="edges")
-            nodes_task = self.search_graph(query, user_id=user_id, limit=max(2, graph_limit // 2), search_scope="nodes")
-            
-            memory, edges, nodes = await asyncio.gather(memory_task, edges_task, nodes_task)
-        else:
-            # Sequential fallback if not all enabled (or just simpler logic)
-            memory = await self.get_memory(session_id) if include_memory else None
-            edges = await self.search_graph(query, user_id=user_id, limit=graph_limit, search_scope="edges") if (include_graph and user_id) else []
-            nodes = await self.search_graph(query, user_id=user_id, limit=max(2, graph_limit // 2), search_scope="nodes") if (include_graph and user_id) else []
-
-        # Process Memory
-        if memory and getattr(memory, "messages", None):
-            recent_messages = memory.messages[-max_messages:]
-            formatted_history = "\n".join(
-                f"{msg.role}: {msg.content}".strip() for msg in recent_messages
-            )
-            context["memory_section"] = formatted_history or "No prior memory yet."
-            context["memory_messages"] = [
-                {"role": msg.role, "content": msg.content} for msg in recent_messages
-            ]
-        else:
-            context["memory_section"] = "No prior memory yet."
-
-        # Process Graph
+        # Parallel retrieval
+        tasks = []
+        if include_memory:
+            tasks.append(self.get_memory(session_id))
         if include_graph and user_id:
-            facts: List[str] = []
+            tasks.append(self.search_graph(query, user_id=user_id, limit=graph_limit, search_scope="edges"))
+            tasks.append(self.search_graph(query, user_id=user_id, limit=max(2, graph_limit // 2), search_scope="nodes"))
+
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+        else:
+            results = []
+
+        idx = 0
+        memory, edges, nodes = None, [], []
+
+        if include_memory:
+            memory = results[idx] if not isinstance(results[idx], Exception) else None
+            idx += 1
+        if include_graph and user_id:
+            edges = results[idx] if idx < len(results) and not isinstance(results[idx], Exception) else []
+            idx += 1
+            nodes = results[idx] if idx < len(results) and not isinstance(results[idx], Exception) else []
+
+        # Process memory
+        if memory and getattr(memory, "messages", None):
+            recent = memory.messages[-max_messages:]
+            context["memory_section"] = "\n".join(f"{m.role}: {m.content}" for m in recent)
+
+        # Process graph
+        if include_graph and user_id:
+            facts = []
             for edge in edges or []:
                 fact = getattr(edge, "fact", None)
                 if fact:
@@ -276,116 +180,69 @@ class ZepService:
                 summary = getattr(node, "summary", None) or getattr(node, "name", None)
                 if summary:
                     facts.append(summary.strip())
-
             if facts:
-                context["graph_section"] = "\n".join(
-                    f"{idx + 1}. {fact}" for idx, fact in enumerate(facts)
-                )
-                context["graph_facts"] = facts
-            else:
-                context["graph_section"] = "No graph facts were retrieved for this query."
+                context["graph_section"] = "\n".join(f"{i+1}. {f}" for i, f in enumerate(facts))
 
         return context
-    
+
     async def list_sessions(self, limit: int = 50) -> List[Dict[str, Any]]:
-        """List sessions (users) from Zep."""
+        """List sessions from Zep."""
         try:
-            # We treat Users as Sessions in this app architecture
             response = await self.client.user.list_ordered(page_size=limit, order_by="created_at", asc=False)
             users = getattr(response, "users", [])
-            
             sessions = []
             for user in users:
-                # Need to find the associated session/thread ID. 
-                # For this app, we usually map 1 user -> 1 session.
-                # We'll rely on metadata if present, or just list the user info.
-                user_id = getattr(user, "user_id", "")
-                
-                # Try to get session ID from metadata first
-                # (We don't strictly have the session_id here unless we query threads for each user, 
-                # which is expensive. But we saved it in metadata in create_session?)
-                # Wait, create_session saved metadata to USER.
-                
                 meta = getattr(user, "metadata", {}) or {}
-                
-                # If we don't have session_id in metadata (legacy), we might skip or imply it.
-                # However, for the UI to work, we need a session_id.
-                # Let's assume we can use user_id if session_id is missing, or we fetch threads.
-                
-                sessions.append({
-                    "session_id": meta.get("session_id", "unknown"), # We will update create_session to store this
-                    "user_id": user_id,
-                    "first_name": getattr(user, "first_name", "User"),
-                    "last_name": getattr(user, "last_name", ""),
-                    "created_at": getattr(user, "created_at", ""),
-                    "metadata": meta
-                })
-            
-            # Filter out sessions with unknown IDs if critical
-            return [s for s in sessions if s["session_id"] != "unknown"]
-            
+                session_id = meta.get("session_id")
+                if session_id:
+                    sessions.append({
+                        "session_id": session_id,
+                        "user_id": getattr(user, "user_id", ""),
+                        "first_name": getattr(user, "first_name", "User"),
+                        "last_name": getattr(user, "last_name", ""),
+                        "created_at": getattr(user, "created_at", ""),
+                    })
+            return sessions
         except Exception as e:
             logger.error(f"Error listing sessions: {e}")
             return []
 
-
     async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get session details. 
-        """
+        """Get session details."""
         try:
-            logger.debug(f"Debug: Fetching thread {session_id}")
             thread = await self.client.thread.get(session_id)
-            logger.debug(f"Debug: Thread found: {thread}")
-            
             user_id = getattr(thread, "user_id", None)
-            logger.debug(f"Debug: Thread user_id: {user_id}")
-            
             if user_id:
                 user = await self.client.user.get(user_id)
-                meta = getattr(user, "metadata", {}) or {}
                 return {
                     "session_id": session_id,
                     "user_id": user_id,
                     "first_name": getattr(user, "first_name", "User"),
                     "last_name": getattr(user, "last_name", ""),
-                    "traits": meta.get("traits", ""),
-                    "preferences": meta.get("preferences", ""),
-                    "business_data": meta.get("business_data", ""),
                     "created_at": getattr(user, "created_at", ""),
                 }
-            else:
-                logger.debug("Debug: No user_id in thread")
         except Exception as e:
             logger.error(f"Error getting session {session_id}: {e}")
-            import traceback
-            traceback.print_exc()
         return None
-    
+
     async def delete_session(self, session_id: str) -> bool:
-        """Delete session (thread) and associated user."""
+        """Delete session and user."""
         try:
-            # Get user ID first
             thread = await self.client.thread.get(session_id)
             user_id = getattr(thread, "user_id", None)
-            
-            # Delete thread
             await self.client.thread.delete(session_id)
-            
-            # Delete user if found
             if user_id:
                 await self.client.user.delete(user_id)
-                
             return True
         except Exception as e:
             logger.error(f"Error deleting session: {e}")
             return False
 
-# Singleton instance
+
 _zep_service: Optional[ZepService] = None
 
+
 def get_zep_service() -> ZepService:
-    """Get or create Zep service instance."""
     global _zep_service
     if _zep_service is None:
         _zep_service = ZepService()

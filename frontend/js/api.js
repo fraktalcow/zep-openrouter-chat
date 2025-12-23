@@ -1,6 +1,5 @@
 /**
  * API Client Module
- * Simple fetch wrappers for all backend endpoints.
  */
 
 const HEADERS = { "Content-Type": "application/json" };
@@ -17,10 +16,6 @@ export const listSessions = () => fetchJson("/session/list");
 export const getSession = (sessionId) => fetchJson(`/session/${sessionId}`);
 export const deleteSession = (sessionId) => fetchJson(`/session/${sessionId}`, { method: "DELETE" });
 
-// Schema
-export const fetchSchema = () => fetchJson("/schema");
-export const saveSchema = (schema) => fetchJson("/schema", { method: "POST", headers: HEADERS, body: JSON.stringify(schema) });
-
 // Models
 export const fetchModels = () => fetchJson("/models/all");
 
@@ -35,4 +30,3 @@ export const clearRAG = () => fetchJson("/rag/clear", { method: "POST" });
 
 // Chat (returns raw fetch for streaming)
 export const fetchChatStream = (payload, signal) => fetch("/chat", { method: "POST", headers: HEADERS, body: JSON.stringify(payload), signal });
-

@@ -6,7 +6,7 @@
     <title>Zep OpenRouter Agent</title>
     <meta
       name="description"
-      content="Open agent interface with tool calls and knowledge graph visualization"
+      content="Chat interface with memory and knowledge graph"
     />
 
     <!-- Vis-Network -->
@@ -14,11 +14,9 @@
       type="text/javascript"
       src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"
     ></script>
-
-    <!-- Marked.js for markdown rendering -->
+    <!-- Marked.js -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-
-    <!-- Google Fonts: JetBrains Mono is closest to Hermit available on CDN -->
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -29,10 +27,11 @@
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
-
     <!-- FontAwesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
     <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
@@ -43,43 +42,35 @@
           <button class="secondary" onclick="openSessionsModal()">
             📋 Sessions
           </button>
-          <button class="secondary" onclick="openSchemaModal()">
-            Edit Schema
-          </button>
           <button onclick="initSession(true)">New Session</button>
         </div>
       </header>
 
       <!-- Panel 1: Configuration -->
       <div class="panel config-panel">
-        <div class="panel-header">
-          <span>Configuration</span>
-        </div>
+        <div class="panel-header"><span>Configuration</span></div>
         <div class="panel-content">
-          <!-- OpenRouter API SECTION -->
+          <!-- OpenRouter API -->
           <div class="config-section">
             <div class="section-header">OpenRouter API</div>
-
             <div class="control-group">
               <label class="toggle-switch">
                 <input type="checkbox" id="ai-toggle" checked />
                 <span class="slider"></span>
-                <span>Enable AI Generation</span>
+                <span>Enable AI</span>
               </label>
             </div>
-
             <div class="input-group">
               <label>Model</label>
               <select id="model-select">
                 <option value="meta-llama/llama-3.2-3b-instruct:free">
-                  Loading available models...
+                  Loading...
                 </option>
               </select>
             </div>
-
             <div style="display: flex; gap: 0.5rem">
               <div class="input-group" style="flex: 1">
-                <label>Temperature (<span id="temp-val">0.7</span>)</label>
+                <label>Temp (<span id="temp-val">0.7</span>)</label>
                 <input
                   type="range"
                   id="temp-input"
@@ -106,7 +97,7 @@
 
           <hr class="divider" />
 
-          <!-- GRAPH SOURCE & RAG SECTION -->
+          <!-- Zep Memory -->
           <div class="config-section">
             <div class="section-header flex">
               <span>Zep Memory</span>
@@ -115,7 +106,6 @@
                 <span class="slider"></span>
               </label>
             </div>
-
             <div id="zep-settings">
               <div style="display: flex; gap: 0.5rem">
                 <div class="input-group" style="flex: 1">
@@ -127,34 +117,6 @@
                   <input type="text" id="last-name" placeholder="Last name" />
                 </div>
               </div>
-
-              <div class="input-group">
-                <label>Traits</label>
-                <textarea
-                  id="traits-input"
-                  style="min-height: 40px"
-                  placeholder="e.g. Curious, detail oriented."
-                ></textarea>
-              </div>
-
-              <div class="input-group">
-                <label>Preferences</label>
-                <textarea
-                  id="preferences-input"
-                  style="min-height: 40px"
-                  placeholder="e.g. Enjoys structured, actionable answers."
-                ></textarea>
-              </div>
-
-              <div class="input-group">
-                <label>Business Data</label>
-                <textarea
-                  id="business-data-input"
-                  style="min-height: 40px"
-                  placeholder="Add business context here"
-                ></textarea>
-              </div>
-
               <div style="margin-top: 0.5rem">
                 <label style="margin-bottom: 0.5rem; display: block"
                   >Memory Modules</label
@@ -173,7 +135,6 @@
                 </div>
               </div>
             </div>
-
             <div
               id="zep-disabled-msg"
               class="disabled-msg"
@@ -182,20 +143,19 @@
               Zep memory disabled.
             </div>
           </div>
-          
+
           <hr class="divider" />
-          
-          <!-- RAG Toggle Only -->
+
+          <!-- RAG Toggle -->
           <div class="config-section">
-             <div class="section-header flex">
+            <div class="section-header flex">
               <span>RAG (Pinecone)</span>
               <label class="toggle-switch" style="margin: 0">
-                <input type="checkbox" id="rag-toggle" checked />
+                <input type="checkbox" id="rag-toggle" />
                 <span class="slider"></span>
               </label>
             </div>
           </div>
-
         </div>
       </div>
 
@@ -265,21 +225,33 @@
               <p>System Ready.<br />Start the conversation.</p>
             </div>
           </div>
-          
-          <!-- Integrated Ingest UI -->
-          <div id="ingest-area" class="ingest-area" style="display: none;">
-             <textarea id="document-text-input" placeholder="Paste context or document text here..."></textarea>
-             <div class="ingest-controls">
-                <button id="ingest-btn" class="btn-sm">Add to Context</button>
-                <button onclick="document.getElementById('ingest-area').style.display='none'" class="secondary btn-sm">Cancel</button>
-             </div>
+
+          <!-- Ingest UI -->
+          <div id="ingest-area" class="ingest-area" style="display: none">
+            <textarea
+              id="document-text-input"
+              placeholder="Paste context or document text here..."
+            ></textarea>
+            <div class="ingest-controls">
+              <button id="ingest-btn" class="btn-sm">Add to Context</button>
+              <button
+                onclick="document.getElementById('ingest-area').style.display='none'"
+                class="secondary btn-sm"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
 
           <div class="input-area">
-            <button class="icon-btn" onclick="document.getElementById('ingest-area').style.display = document.getElementById('ingest-area').style.display === 'none' ? 'block' : 'none'" title="Add Context">
-                <i class="fa-solid fa-paperclip"></i>
+            <button
+              class="icon-btn"
+              onclick="document.getElementById('ingest-area').style.display = document.getElementById('ingest-area').style.display === 'none' ? 'block' : 'none'"
+              title="Add Context"
+            >
+              <i class="fa-solid fa-paperclip"></i>
             </button>
-            <div class="input-wrapper" style="position: relative; flex: 1;">
+            <div class="input-wrapper" style="position: relative; flex: 1">
               <input
                 type="text"
                 id="message-input"
@@ -288,44 +260,9 @@
               />
             </div>
             <button onclick="sendMessage()" id="send-btn">
-                <i class="fa-solid fa-paper-plane"></i>
+              <i class="fa-solid fa-paper-plane"></i>
             </button>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal -->
-    <div class="modal-overlay" id="schema-modal">
-      <div class="modal">
-        <div class="modal-header">
-          <span style="font-weight: 700">Edit Schema</span>
-          <button
-            class="secondary"
-            onclick="closeSchemaModal()"
-            style="border: none; padding: 0; color: var(--ctp-red)"
-          >
-            ✕
-          </button>
-        </div>
-        <div class="modal-body">
-          <p
-            style="
-              margin-bottom: 1rem;
-              color: var(--ctp-subtext0);
-              font-size: 0.85rem;
-            "
-          >
-            Modifying ontology definitions...
-          </p>
-          <textarea
-            id="schema-editor"
-            style="height: 300px; font-size: 0.85rem"
-          ></textarea>
-        </div>
-        <div class="modal-footer">
-          <button class="secondary" onclick="closeSchemaModal()">CANCEL</button>
-          <button onclick="saveSchema()">Save</button>
         </div>
       </div>
     </div>

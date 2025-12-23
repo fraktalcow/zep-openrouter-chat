@@ -7,8 +7,6 @@ from logger import logger
 from config import get_settings
 
 
-from config import get_settings
-
 class OpenRouterService:
     """Service for interacting with OpenRouter Chat Completions API."""
     
@@ -272,23 +270,7 @@ class OpenRouterService:
         
         return filtered[:limit]
     
-    async def fetch_embedding_models(self) -> List[Dict[str, Any]]:
-        """Fetch models that support embeddings."""
-        all_models = await self.fetch_all_models()
-        
-        embedding_models = [
-            {"id": m["id"], "name": m["name"], "description": m.get("description", ""), "pricing": m.get("pricing", {})}
-            for m in all_models
-            if "embedding" in m["id"].lower() or "embed" in m.get("architecture", {}).get("modality", "").lower()
-        ]
-        
-        known = ["openai/text-embedding-3-small", "openai/text-embedding-3-large", "openai/text-embedding-ada-002"]
-        existing = {m["id"] for m in embedding_models}
-        for k in known:
-            if k not in existing:
-                embedding_models.append({"id": k, "name": k.split("/")[-1], "description": "OpenAI embedding", "pricing": {}})
-        
-        return embedding_models
+
 
 # Singleton instance
 _openrouter_service: Optional[OpenRouterService] = None
