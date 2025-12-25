@@ -4,7 +4,7 @@ __pycache__/
 *.pyc
 docs/
 tests/
-
+uv.lock
 # Database
 backend/*.db
-uv.lock
+
