@@ -145,17 +145,6 @@
           </div>
 
           <hr class="divider" />
-
-          <!-- RAG Toggle -->
-          <div class="config-section">
-            <div class="section-header flex">
-              <span>RAG (Pinecone)</span>
-              <label class="toggle-switch" style="margin: 0">
-                <input type="checkbox" id="rag-toggle" />
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -208,6 +197,18 @@
             "
           ></span>
           <span
+            id="rag-indicator"
+            style="
+              font-size: 0.7rem;
+              color: var(--ctp-teal);
+              margin-right: 1rem;
+              display: none;
+            "
+            title="RAG context available"
+          >
+            <i class="fa-solid fa-database"></i> RAG Active
+          </span>
+          <span
             id="session-badge"
             style="color: var(--ctp-green); font-size: 0.75rem"
             >ID: NULL</span
@@ -226,28 +227,42 @@
             </div>
           </div>
 
-          <!-- Ingest UI -->
-          <div id="ingest-area" class="ingest-area" style="display: none">
-            <textarea
-              id="document-text-input"
-              placeholder="Paste context or document text here..."
-            ></textarea>
+          <!-- File Upload UI -->
+          <div id="upload-area" class="ingest-area" style="display: none">
+            <div style="text-align: center; margin-bottom: 1rem">
+              <i class="fa-solid fa-file-arrow-up" style="font-size: 2rem; color: var(--ctp-lavender)"></i>
+              <p style="margin: 0.5rem 0; color: var(--ctp-text); font-weight: 500">
+                Add Document for Context
+              </p>
+              <p style="margin: 0; font-size: 0.75rem; color: var(--ctp-subtext0)">
+                PDF, TXT, MD, DOCX
+              </p>
+            </div>
+            <input
+              type="file"
+              id="file-input"
+              accept=".pdf,.txt,.md,.markdown,.docx"
+              style="display: none"
+            />
             <div class="ingest-controls">
-              <button id="ingest-btn" class="btn-sm">Add to Context</button>
+              <button id="select-file-btn" class="btn-sm">
+                <i class="fa-solid fa-file"></i> Choose File
+              </button>
               <button
-                onclick="document.getElementById('ingest-area').style.display='none'"
+                onclick="document.getElementById('upload-area').style.display='none'"
                 class="secondary btn-sm"
               >
                 Cancel
               </button>
             </div>
+            <div id="upload-status" style="margin-top: 1rem; display: none; font-size: 0.85rem; color: var(--ctp-text)"></div>
           </div>
 
           <div class="input-area">
             <button
               class="icon-btn"
-              onclick="document.getElementById('ingest-area').style.display = document.getElementById('ingest-area').style.display === 'none' ? 'block' : 'none'"
-              title="Add Context"
+              id="upload-toggle-btn"
+              title="Attach Document"
             >
               <i class="fa-solid fa-paperclip"></i>
             </button>

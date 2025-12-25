@@ -11,12 +11,6 @@ Lightweight AI chat with **Zep Knowledge Graph** and **OpenRouter AI** for conte
 - User preferences, traits, conversation history
 - Semantic search and retrieval
 
-**RAG (OpenRouter)** - Document ingestion using OpenRouter embeddings
-
-- Multiple embedding models available (text-embedding-3-small, etc.)
-- In-memory vector store with cosine similarity search
-- Toggleable in UI
-
 **AI Models** - 100+ models via OpenRouter
 
 - Free models: Llama, Gemini, Mistral, Phi-3, Qwen
@@ -26,26 +20,24 @@ Lightweight AI chat with **Zep Knowledge Graph** and **OpenRouter AI** for conte
 
 - **Backend**: FastAPI, Python 3.10+
 - **Memory**: Zep Cloud
-- **Embeddings**: OpenRouter API
 - **AI**: OpenRouter API
 
 ## Installation
 
 ```bash
-# Install UV
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Clone & install
+# Clone
 git clone <repo-url>
 cd zep-openrouter-agent
-uv sync
+
+# Create virtual environment
+python3 -m venv .venv
 
 # Configure
 cp backend/.env.example backend/.env
 # Edit backend/.env with API keys
 
 # Run
-uv run python backend/server.py
+python run.py
 ```
 
 ## Configuration
@@ -59,19 +51,13 @@ ZEP_API_KEY=         # https://www.getzep.com/
 
 ## API Endpoints
 
-| Endpoint           | Description               |
-| ------------------ | ------------------------- |
-| `POST /chat`       | Chat with AI (SSE stream) |
-| `POST /session`    | Create session            |
-| `GET /models/all`  | List AI models            |
-| `GET /rag/models`  | List embedding models     |
-| `POST /rag/models` | Set embedding model       |
-| `POST /rag/ingest` | Ingest document           |
-| `POST /rag/search` | Search RAG store          |
-| `GET /rag/stats`   | RAG statistics            |
+| Endpoint          | Description               |
+| ----------------- | ------------------------- |
+| `POST /chat`      | Chat with AI (SSE stream) |
+| `POST /session`   | Create session            |
+| `GET /models/all` | List AI models            |
 
 ## Resources
 
 - [OpenRouter API](https://openrouter.ai/docs)
-- [OpenRouter Embeddings](https://openrouter.ai/docs/api/reference/embeddings)
 - [Zep Documentation](https://help.getzep.com/)

@@ -14,7 +14,7 @@ export const state = {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
-    Promise.all([initSession(), populateModels()]).catch(console.error);
+    Promise.all([initSession(), populateModels(), checkRAGStatus()]).catch(console.error);
     setupEventListeners();
 });
 
@@ -24,7 +24,19 @@ function setupEventListeners() {
     document.getElementById("message-input")?.addEventListener("keydown", (e) => {
         if (e.key === "Enter") handleSendMessage();
     });
-    document.getElementById("ingest-btn")?.addEventListener("click", handleIngest);
+    
+    // File upload handlers
+    document.getElementById("upload-toggle-btn")?.addEventListener("click", () => {
+        const uploadArea = document.getElementById("upload-area");
+        uploadArea.style.display = uploadArea.style.display === "none" ? "block" : "none";
+    });
+    
+    document.getElementById("select-file-btn")?.addEventListener("click", () => {
+        document.getElementById("file-input")?.click();
+    });
+    
+    document.getElementById("file-input")?.addEventListener("change", handleFileUpload);
+    
     window.addEventListener("resize", () => Graph.resizeGraph());
 }
 
@@ -250,26 +262,80 @@ function toggleZepSettings() {
     if (disabled) disabled.style.display = isEnabled ? "none" : "block";
 }
 
-async function handleIngest() {
-    const textArea = document.getElementById("document-text-input");
-    const text = textArea?.value?.trim();
-    if (!text) return alert("Enter document text");
+async function handleFileUpload(event) {
+    const fileInput = event.target;
+    const file = fileInput.files?.[0];
     
-    const ingestArea = document.getElementById("ingest-area");
-    const btn = document.getElementById("ingest-btn");
-    const originalText = btn.textContent;
-    btn.textContent = "Adding...";
-    btn.disabled = true;
+    if (!file) return;
+    
+    const uploadArea = document.getElementById("upload-area");
+    const statusDiv = document.getElementById("upload-status");
+    const selectBtn = document.getElementById("select-file-btn");
+    
+    // Validate file type
+    const allowedExts = ['pdf', 'txt', 'md', 'markdown', 'docx'];
+    const fileExt = file.name.split('.').pop().toLowerCase();
+    
+    if (!allowedExts.includes(fileExt)) {
+        UI.showToast(`Unsupported file type: ${fileExt}. Use PDF, TXT, MD, or DOCX.`, "error", 5000);
+        fileInput.value = "";
+        return;
+    }
+    
+    // Show uploading status
+    statusDiv.style.display = "block";
+    statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Uploading ${file.name}...`;
+    selectBtn.disabled = true;
     
     try {
-        await API.ingestDocument(text, { source: "manual" });
-        textArea.value = "";
-        ingestArea.style.display = "none";
-        UI.addMessage("system", "✓ Context added to RAG.");
+        const result = await API.uploadDocument(file, state.sessionId);
+        
+        statusDiv.innerHTML = `
+            <div style="color: var(--ctp-green)">
+                <i class="fa-solid fa-check-circle"></i> 
+                Successfully added: ${result.filename}
+                <br>
+                <span style="font-size: 0.75rem; color: var(--ctp-subtext0)">
+                    ${result.chunks} chunks indexed for retrieval
+                </span>
+            </div>
+        `;
+        
+        UI.addMessage("system", `✓ Document indexed: ${result.filename} (${result.chunks} chunks)`);
+        
+        // Show RAG indicator
+        const ragIndicator = document.getElementById("rag-indicator");
+        if (ragIndicator) {
+            ragIndicator.style.display = "inline";
+        }
+        
+        // Clear after delay
+        setTimeout(() => {
+            uploadArea.style.display = "none";
+            statusDiv.style.display = "none";
+            fileInput.value = "";
+        }, 3000);
+        
     } catch (e) {
-        alert(`Error adding context: ${e.message}`);
+        console.error("Upload failed:", e);
+        statusDiv.innerHTML = `<div style="color: var(--ctp-red)"><i class="fa-solid fa-exclamation-triangle"></i> ${e.message}</div>`;
+        UI.showToast(`Upload failed: ${e.message}`, "error", 5000);
     } finally {
-        btn.textContent = originalText;
-        btn.disabled = false;
+        selectBtn.disabled = false;
+    }
+}
+
+// Check if RAG has documents on load
+async function checkRAGStatus() {
+    try {
+        const stats = await API.fetchRAGStats();
+        const hasDocuments = stats.total_vectors > 0;
+        
+        const ragIndicator = document.getElementById("rag-indicator");
+        if (ragIndicator && hasDocuments) {
+            ragIndicator.style.display = "inline";
+        }
+    } catch (e) {
+        console.log("RAG stats unavailable:", e.message);
     }
 }

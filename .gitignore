@@ -7,3 +7,4 @@ tests/
 
 # Database
 backend/*.db
+uv.lock

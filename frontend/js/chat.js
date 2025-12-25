@@ -36,10 +36,13 @@ export async function sendMessage(state) {
 
     // Get settings
     const useAi = document.getElementById("ai-toggle")?.checked ?? true;
-    const useRag = document.getElementById("rag-toggle")?.checked ?? false;
     const modelSelect = document.getElementById("model-select");
     const modelId = modelSelect?.value || CONFIG.FALLBACK_MODEL;
     const modelName = modelSelect?.selectedOptions[0]?.textContent || modelId;
+    
+    // Auto-enable RAG if documents are indexed (indicator is visible)
+    const ragIndicator = document.getElementById("rag-indicator");
+    const useRag = ragIndicator?.style.display !== "none";
 
     // Show loading
     let loadingMsgEl = UI.createLoadingMessage(modelName);
