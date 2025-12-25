@@ -46,105 +46,20 @@
         </div>
       </header>
 
-      <!-- Panel 1: Configuration -->
+      <!-- Panel 1: Session Management -->
       <div class="panel config-panel">
-        <div class="panel-header"><span>Configuration</span></div>
+        <div class="panel-header"><span>Session</span></div>
         <div class="panel-content">
-          <!-- OpenRouter API -->
           <div class="config-section">
-            <div class="section-header">OpenRouter API</div>
-            <div class="control-group">
-              <label class="toggle-switch">
-                <input type="checkbox" id="ai-toggle" checked />
-                <span class="slider"></span>
-                <span>Enable AI</span>
-              </label>
+            <div class="input-group">
+              <label>First Name</label>
+              <input type="text" id="first-name" placeholder="First name" value="User" />
             </div>
             <div class="input-group">
-              <label>Model</label>
-              <select id="model-select">
-                <option value="meta-llama/llama-3.2-3b-instruct:free">
-                  Loading...
-                </option>
-              </select>
-            </div>
-            <div style="display: flex; gap: 0.5rem">
-              <div class="input-group" style="flex: 1">
-                <label>Temp (<span id="temp-val">0.7</span>)</label>
-                <input
-                  type="range"
-                  id="temp-input"
-                  min="0"
-                  max="2"
-                  step="0.1"
-                  value="0.7"
-                  oninput="document.getElementById('temp-val').textContent = this.value"
-                  style="width: 100%; accent-color: var(--ctp-lavender)"
-                />
-              </div>
-              <div class="input-group" style="flex: 1">
-                <label>Max Tokens</label>
-                <input
-                  type="number"
-                  id="max-tokens-input"
-                  value="1024"
-                  min="1"
-                  max="100000"
-                />
-              </div>
+              <label>Last Name</label>
+              <input type="text" id="last-name" placeholder="Last name" />
             </div>
           </div>
-
-          <hr class="divider" />
-
-          <!-- Zep Memory -->
-          <div class="config-section">
-            <div class="section-header flex">
-              <span>Zep Memory</span>
-              <label class="toggle-switch" style="margin: 0">
-                <input type="checkbox" id="zep-toggle" checked />
-                <span class="slider"></span>
-              </label>
-            </div>
-            <div id="zep-settings">
-              <div style="display: flex; gap: 0.5rem">
-                <div class="input-group" style="flex: 1">
-                  <label>First Name</label>
-                  <input type="text" id="first-name" placeholder="First name" />
-                </div>
-                <div class="input-group" style="flex: 1">
-                  <label>Last Name</label>
-                  <input type="text" id="last-name" placeholder="Last name" />
-                </div>
-              </div>
-              <div style="margin-top: 0.5rem">
-                <label style="margin-bottom: 0.5rem; display: block"
-                  >Memory Modules</label
-                >
-                <div style="display: flex; gap: 1.5rem">
-                  <label class="toggle-switch">
-                    <input type="checkbox" id="memory-toggle" checked />
-                    <span class="slider"></span>
-                    <span>Mem</span>
-                  </label>
-                  <label class="toggle-switch">
-                    <input type="checkbox" id="retrieval-toggle" checked />
-                    <span class="slider"></span>
-                    <span>Graph</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-            <div
-              id="zep-disabled-msg"
-              class="disabled-msg"
-              style="display: none"
-            >
-              Zep memory disabled.
-            </div>
-          </div>
-
-          <hr class="divider" />
         </div>
       </div>
 
@@ -184,23 +99,11 @@
         <div class="panel-header">
           <span>Chat</span>
           <span
-            id="active-model-display"
-            style="
-              font-size: 0.7rem;
-              color: var(--ctp-subtext0);
-              margin-left: auto;
-              margin-right: 1rem;
-              max-width: 200px;
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-            "
-          ></span>
-          <span
             id="rag-indicator"
             style="
               font-size: 0.7rem;
               color: var(--ctp-teal);
+              margin-left: auto;
               margin-right: 1rem;
               display: none;
             "

@@ -34,11 +34,14 @@ export async function sendMessage(state) {
     const sendBtn = document.getElementById("send-btn");
     if (sendBtn) sendBtn.disabled = true;
 
-    // Get settings
-    const useAi = document.getElementById("ai-toggle")?.checked ?? true;
-    const modelSelect = document.getElementById("model-select");
-    const modelId = modelSelect?.value || CONFIG.FALLBACK_MODEL;
-    const modelName = modelSelect?.selectedOptions[0]?.textContent || modelId;
+    // Default settings (UI elements removed for simplicity)
+    const useAi = true; // Always use AI
+    const modelId = "meta-llama/llama-3.2-3b-instruct:free"; // Default model
+    const modelName = "Llama 3.2 3B";
+    const temperature = 0.7;
+    const maxTokens = 1024;
+    const useMemory = true; // Always use memory
+    const useRetrieval = true; // Always use graph retrieval
     
     // Auto-enable RAG if documents are indexed (indicator is visible)
     const ragIndicator = document.getElementById("rag-indicator");
@@ -60,13 +63,13 @@ export async function sendMessage(state) {
         const payload = {
             session_id: state.sessionId,
             message: text,
-            use_memory: document.getElementById("memory-toggle")?.checked ?? true,
-            use_retrieval: document.getElementById("retrieval-toggle")?.checked ?? true,
+            use_memory: useMemory,
+            use_retrieval: useRetrieval,
             use_rag: useRag,
             use_ai: useAi,
             model_name: modelId,
-            temperature: parseFloat(document.getElementById("temp-input")?.value || String(CONFIG.DEFAULT_TEMPERATURE)),
-            max_tokens: parseInt(document.getElementById("max-tokens-input")?.value || String(CONFIG.DEFAULT_MAX_TOKENS)),
+            temperature: temperature,
+            max_tokens: maxTokens,
         };
 
         const res = await API.fetchChatStream(payload, abortController.signal);

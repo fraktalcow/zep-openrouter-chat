@@ -14,12 +14,11 @@ export const state = {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
-    Promise.all([initSession(), populateModels(), checkRAGStatus()]).catch(console.error);
+    Promise.all([initSession(), checkRAGStatus()]).catch(console.error);
     setupEventListeners();
 });
 
 function setupEventListeners() {
-    document.getElementById("zep-toggle")?.addEventListener("change", toggleZepSettings);
     document.getElementById("send-btn")?.addEventListener("click", handleSendMessage);
     document.getElementById("message-input")?.addEventListener("keydown", (e) => {
         if (e.key === "Enter") handleSendMessage();
@@ -225,41 +224,6 @@ export async function scheduleGraphRefresh() {
         }
         lastCounts = counts;
     }
-}
-
-async function populateModels() {
-    const select = document.getElementById("model-select");
-    if (!select) return;
-    
-    try {
-        const data = await API.fetchModels();
-        select.innerHTML = "";
-        
-        const freeGroup = document.createElement("optgroup");
-        freeGroup.label = "Free Models";
-        const paidGroup = document.createElement("optgroup");
-        paidGroup.label = "All Models";
-
-        data.models.sort((a, b) => a.name.localeCompare(b.name));
-        data.models.forEach(model => {
-            const option = document.createElement("option");
-            option.value = model.id;
-            option.textContent = model.name.replace(/\s*\(free\)\s*/gi, '').trim();
-            (model.pricing.prompt === "0" ? freeGroup : paidGroup).appendChild(option);
-        });
-        select.append(freeGroup, paidGroup);
-        select.value = CONFIG.DEFAULT_MODEL;
-    } catch (e) {
-        select.innerHTML = `<option value='${CONFIG.FALLBACK_MODEL}'>Fallback: Llama 3.2 3B</option>`;
-    }
-}
-
-function toggleZepSettings() {
-    const isEnabled = document.getElementById("zep-toggle")?.checked;
-    const settings = document.getElementById("zep-settings");
-    const disabled = document.getElementById("zep-disabled-msg");
-    if (settings) settings.style.display = isEnabled ? "block" : "none";
-    if (disabled) disabled.style.display = isEnabled ? "none" : "block";
 }
 
 async function handleFileUpload(event) {
