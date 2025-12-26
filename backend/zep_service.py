@@ -153,23 +153,22 @@ class ZepService:
             logger.error(f"Error listing sessions: {e}")
             return []
 
-    async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """Get session details."""
+    async def get_session_messages(self, session_id: str) -> List[Dict[str, Any]]:
+        """Get session messages (history)."""
         try:
-            thread = await self.client.thread.get(session_id)
-            meta = getattr(thread, "metadata", {}) or {}
-            
-            return {
-                "session_id": thread.thread_id,
-                "user_id": getattr(thread, "user_id", ""),
-                "first_name": meta.get("first_name", "User"),
-                "last_name": meta.get("last_name", ""),
-                "created_at": getattr(thread, "created_at", ""),
-            }
+            response = await self.client.thread.get(session_id)
+            messages = getattr(response, "messages", [])
+            return [
+                {
+                    "role": getattr(m, "role", "user"), 
+                    "content": getattr(m, "content", ""),
+                    "created_at": getattr(m, "created_at", "")
+                } 
+                for m in messages
+            ]
         except Exception as e:
-            # logger.error(f"Error getting session {session_id}: {e}")
-            pass
-        return None
+            logger.error(f"Error getting session history {session_id}: {e}")
+            return []
 
     async def delete_session(self, session_id: str) -> bool:
         """Delete session (thread)."""

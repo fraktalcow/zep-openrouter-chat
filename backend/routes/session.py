@@ -24,11 +24,14 @@ async def list_sessions():
 
 @router.get("/{session_id}")
 async def get_session(session_id: str):
-    """Get a specific session by ID from Zep."""
-    session = await get_zep_service().get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return session
+    """Get a specific session history from Zep."""
+    # We now return the history messages
+    messages = await get_zep_service().get_session_messages(session_id)
+    # The frontend expects { session_id, messages: [] } or just details?
+    # To fix loadSession, we can return the structure it might expect or update frontend.
+    # Frontend currently expects metadata. We should probably update frontend to rely on list for metadata
+    # and this endpoint for history.
+    return {"session_id": session_id, "messages": messages}
 
 
 @router.delete("/{session_id}")

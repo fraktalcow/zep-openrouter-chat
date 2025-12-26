@@ -11,6 +11,7 @@ import { sendMessage } from './chat.js';
 export const state = {
     sessionId: null,
     userId: null,
+    availableSessions: [] 
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -51,7 +52,7 @@ async function restoreSessionOrInit() {
             await loadSession(lastSessionId);
             return;
         } catch (e) {
-            console.log("Could not restore last session, creating new one.");
+            console.warn("Could not restore last session (likely deleted), creating new one.");
             localStorage.removeItem("zep_last_session_id");
         }
     }
@@ -149,6 +150,7 @@ async function renderSessionsModal() {
     
     try {
         const { sessions } = await API.listSessions();
+        state.availableSessions = sessions; // Cache for lookup
         
         if (!sessions.length) {
             container.innerHTML = '<div class="sessions-empty">No saved sessions.<br>Click "New Session" to create one.</div>';
@@ -198,15 +200,47 @@ async function loadSession(sessionId) {
     }
     
     try {
-        const data = await API.getSession(sessionId);
-        setActiveSession(data);
+        // Find metadata from cached list if possible (fallback to Unknown)
+        const cached = state.availableSessions.find(s => s.session_id === sessionId) || {};
+        
+        // Fetch history
+        const data = await API.getSession(sessionId); // Returns { session_id, messages: [] }
+        
+        // Construct session data for active state
+        const sessionData = {
+            session_id: sessionId,
+            user_id: cached.user_id || state.userId, // keep current user if we don't know
+            first_name: cached.first_name || "User",
+            last_name: cached.last_name || ""
+        };
+        
+        setActiveSession(sessionData);
         document.getElementById("chat-box").innerHTML = "";
+        
+        // Render history
+        if (data.messages && Array.isArray(data.messages)) {
+            data.messages.reverse().forEach(msg => { // Zep usually returns newest first? Check Zep docs. Actually usually oldest first for chat.
+                // If newest first, we reverse. If oldest first, we don't.
+                // Assuming standard cronological or handled by UI loop.
+                // Let's assume returned in list order.
+                // Zep v3 list messages default order: check. 
+                // Usually time desc for logs, time asc for chat.
+                // Let's assume we simply append.
+                // If it looks wrong we fix it.
+                if (msg.role && msg.content) {
+                     UI.addMessage(msg.role, msg.content);
+                }
+            });
+        }
+        
         refreshGraph();
         closeSessionsModal();
-        UI.addMessage("system", `Loaded session: ${data.first_name} ${data.last_name}`);
+        UI.addMessage("system", `Loaded session: ${sessionData.first_name} ${sessionData.last_name}`);
     } catch (e) {
         console.error("Failed to load session", e);
-        UI.addMessage("system", "Failed to load session.");
+        // If we are just trying to load (not restore loop), show error
+        // But rethrow so restore loop can handle it
+        throw e;
     }
 }
 
