@@ -34,12 +34,14 @@ export async function sendMessage(state) {
     const sendBtn = document.getElementById("send-btn");
     if (sendBtn) sendBtn.disabled = true;
 
-    // Default settings (UI elements removed for simplicity)
+    // Get settings from UI with fallback defaults
+    const modelSelect = document.getElementById("model-select");
+    const modelId = modelSelect?.value || CONFIG.FALLBACK_MODEL;
+    const modelName = modelSelect?.selectedOptions[0]?.textContent || "Llama 3.2 3B";
+    const temperature = parseFloat(document.getElementById("temp-input")?.value || "0.7");
+    const maxTokens = parseInt(document.getElementById("max-tokens-input")?.value || "1024");
+    
     const useAi = true; // Always use AI
-    const modelId = "meta-llama/llama-3.2-3b-instruct:free"; // Default model
-    const modelName = "Llama 3.2 3B";
-    const temperature = 0.7;
-    const maxTokens = 1024;
     const useMemory = true; // Always use memory
     const useRetrieval = true; // Always use graph retrieval
     

@@ -5,6 +5,3 @@ __pycache__/
 docs/
 tests/
 uv.lock
-# Database
-backend/*.db
-

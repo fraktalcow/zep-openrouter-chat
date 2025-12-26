@@ -14,7 +14,7 @@ export const state = {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
-    Promise.all([initSession(), checkRAGStatus()]).catch(console.error);
+    Promise.all([initSession(), populateModels(), checkRAGStatus()]).catch(console.error);
     setupEventListeners();
 });
 
@@ -223,6 +223,33 @@ export async function scheduleGraphRefresh() {
             console.log(`Graph updated: ${counts.nodes} nodes, ${counts.edges} edges`);
         }
         lastCounts = counts;
+    }
+}
+
+async function populateModels() {
+    const select = document.getElementById("model-select");
+    if (!select) return;
+    
+    try {
+        const data = await API.fetchModels();
+        select.innerHTML = "";
+        
+        const freeGroup = document.createElement("optgroup");
+        freeGroup.label = "Free Models";
+        const paidGroup = document.createElement("optgroup");
+        paidGroup.label = "All Models";
+
+        data.models.sort((a, b) => a.name.localeCompare(b.name));
+        data.models.forEach(model => {
+            const option = document.createElement("option");
+            option.value = model.id;
+            option.textContent = model.name.replace(/\s*\(free\)\s*/gi, '').trim();
+            (model.pricing.prompt === "0" ? freeGroup : paidGroup).appendChild(option);
+        });
+        select.append(freeGroup, paidGroup);
+        select.value = CONFIG.DEFAULT_MODEL;
+    } catch (e) {
+        select.innerHTML = `<option value='${CONFIG.FALLBACK_MODEL}'>Fallback: Llama 3.2 3B</option>`;
     }
 }
 
