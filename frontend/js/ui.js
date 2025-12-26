@@ -86,14 +86,42 @@ export function updateLoadingStatus(element, statusText, color = null) {
 }
 
 /**
- * Display context block in debug panel.
- * @param {{rendered: string}} data - Context data
+ * Display context block in chat.
+ * @param {{sections: {memory_section: string}}} data - Context data
  */
 export function displayContextBlock(data) {
-    const contextBlock = document.getElementById("context-block");
-    if (contextBlock && data?.rendered) {
-        contextBlock.textContent = data.rendered;
-    }
+    const contextContent = data?.sections?.memory_section;
+    if (!contextContent) return;
+
+    const chatBox = getChatBox();
+    if (!chatBox) return;
+
+    const div = document.createElement("div");
+    div.className = "zep-context-block";
+    div.style.cssText = "margin: 0.5rem 1rem;";
+
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.style.cssText = `cursor: pointer; color: ${COLORS.lavender}; font-size: 0.8rem; font-family: var(--font-mono);`;
+    summary.innerHTML = `<strong>Zep Context</strong> (Summary & Facts)`;
+    details.appendChild(summary);
+
+    const contentDiv = document.createElement("div");
+    contentDiv.style.cssText = `font-size: 0.75rem; padding: 0.5rem; border-left: 2px solid ${COLORS.surface2}; margin-top: 0.3rem; color: ${COLORS.subtext0}; white-space: pre-wrap; font-family: var(--font-mono);`;
+    
+    // Basic formatting to highlight headers
+    let formattedContent = contextContent
+        .replace(/<USER_SUMMARY>/g, '<span style="color:var(--ctp-green); font-weight:bold">&lt;USER_SUMMARY&gt;</span>')
+        .replace(/<\/USER_SUMMARY>/g, '<span style="color:var(--ctp-green); font-weight:bold">&lt;/USER_SUMMARY&gt;</span>')
+        .replace(/<FACTS>/g, '<span style="color:var(--ctp-blue); font-weight:bold">&lt;FACTS&gt;</span>')
+        .replace(/<\/FACTS>/g, '<span style="color:var(--ctp-blue); font-weight:bold">&lt;/FACTS&gt;</span>');
+
+    contentDiv.innerHTML = formattedContent;
+    details.appendChild(contentDiv);
+    div.appendChild(details);
+
+    chatBox.appendChild(div);
+    scrollToBottom();
 }
 
 /**

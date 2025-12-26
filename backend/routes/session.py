@@ -12,6 +12,7 @@ router = APIRouter()
 class SessionRequest(BaseModel):
     first_name: str = "User"
     last_name: str = ""
+    user_id: str | None = None
 
 
 @router.get("/list")
@@ -41,8 +42,12 @@ async def delete_session(session_id: str):
 
 @router.post("")
 async def create_session(request: SessionRequest):
-    """Create a new session in Zep."""
-    user_id = f"user_{uuid.uuid4().hex[:8]}"
+    """Create a new session (thread) in Zep."""
+    # Reuse user_id if provided, otherwise generate a persistent-like one (or random)
+    # Ideally frontend should cache user_id. 
+    user_id = request.user_id or f"user_{uuid.uuid4().hex[:8]}"
+    
+    # Generate new thread_id
     session_id = f"session_{uuid.uuid4().hex[:8]}"
 
     try:

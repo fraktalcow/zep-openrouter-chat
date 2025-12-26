@@ -108,9 +108,10 @@ export async function sendMessage(state) {
                         UI.renderRagSources(data.chunks);
                     }
                     
-                    // Context Block Debug
+                    // Context Block Debug -> Render it
                     else if (data.type === "context") {
-                        console.log("Context built:", data.context_block);
+                        // data.context_block.sections.memory_section contains the raw text
+                        UI.displayContextBlock(data.context_block);
                     }
 
                     // Content Streaming - also check for API errors

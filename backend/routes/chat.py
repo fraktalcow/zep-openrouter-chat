@@ -73,13 +73,12 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
     tasks = {}
     
     if session_meta:
-        tasks['zep'] = zep_service.build_context_block(
+        # Add user message AND retrieve context in one go
+        tasks['zep'] = zep_service.add_memory(
             session_id=request.session_id,
-            user_id=session_meta.get("user_id"),
-            query=request.message,
-            include_memory=request.use_memory,
-            include_graph=request.use_retrieval,
-            max_messages=request.context_message_limit,
+            role="user",
+            content=request.message,
+            return_context=True
         )
     
     if request.use_rag:
@@ -101,14 +100,19 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
         
         results_map = dict(zip(tasks.keys(), results))
 
-        # Process Zep
+        # Process Zep Context (Summary + Facts)
         if 'zep' in results_map:
             res = results_map['zep']
             if isinstance(res, Exception):
                 logger.error(f"Zep Error: {res}")
-            else:
-                context_sections["memory_section"] = res.get("memory_section", "")
-                context_sections["graph_section"] = res.get("graph_section", "")
+            elif res:
+                # The 'res' here is the context string returned by add_messages(return_context=True)
+                # It contains <USER_SUMMARY> and <FACTS> sections.
+                # We can put it directly into memory_section for now, or assume it covers graph too.
+                context_sections["memory_section"] = res
+                # graph_section is likely included in the Facts part of the response, so we might leave it empty
+                # or we can parse it if we really want to split it.
+
                 
         # Process RAG
         if 'rag' in results_map:
@@ -176,8 +180,9 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
 @router.post("")
 async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     """Chat endpoint with streaming SSE response."""
-    if request.use_memory or request.use_retrieval:
-        background_tasks.add_task(get_zep_service().add_memory, request.session_id, "user", request.message)
+    """Chat endpoint with streaming SSE response."""
+    # Note: User memory is now added INSIDE _stream_chat_response to get context immediately.
+
 
     return StreamingResponse(
         _stream_chat_response(request, background_tasks),

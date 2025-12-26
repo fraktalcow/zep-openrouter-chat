@@ -14,7 +14,7 @@ export const state = {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
-    Promise.all([initSession(), populateModels(), checkRAGStatus()]).catch(console.error);
+    Promise.all([restoreSessionOrInit(), populateModels(), checkRAGStatus()]).catch(console.error);
     setupEventListeners();
 });
 
@@ -44,12 +44,32 @@ async function handleSendMessage() {
     refreshGraph();
 }
 
+async function restoreSessionOrInit() {
+    const lastSessionId = localStorage.getItem("zep_last_session_id");
+    if (lastSessionId) {
+        try {
+            await loadSession(lastSessionId);
+            return;
+        } catch (e) {
+            console.log("Could not restore last session, creating new one.");
+            localStorage.removeItem("zep_last_session_id");
+        }
+    }
+    await initSession(true);
+}
+
 async function initSession(forceNew = false) {
     if (!forceNew && state.sessionId) return;
+    
+    // If forcing new, clear the last session ID so we don't just reload it next time effectively
+    // actually, we will update it in setActiveSession, so it's fine.
 
+    const storedUserId = localStorage.getItem("zep_user_id");
+    
     const payload = {
         first_name: document.getElementById("first-name")?.value || "User",
         last_name: document.getElementById("last-name")?.value || "",
+        user_id: storedUserId || undefined
     };
 
     try {
@@ -77,6 +97,14 @@ Object.assign(window, {
 function setActiveSession(data) {
     state.sessionId = data.session_id;
     state.userId = data.user_id;
+    
+    if (data.session_id) {
+        localStorage.setItem("zep_last_session_id", data.session_id);
+    }
+
+    if (data.user_id) {
+        localStorage.setItem("zep_user_id", data.user_id);
+    }
     
     const badge = document.getElementById("session-badge");
     if (badge) badge.textContent = `ID: ${state.sessionId.split("_")[1] || state.sessionId}`;
@@ -138,11 +166,16 @@ async function renderSessionsModal() {
             groupSessions.forEach(s => {
                 const isActive = s.session_id === state.sessionId;
                 const shortId = s.session_id.split('_')[1] || s.session_id;
+                const dateObj = new Date(s.created_at);
+                const dateStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                
                 html += `
                     <div class="session-item ${isActive ? 'active' : ''}" onclick="loadSession('${s.session_id}')">
                         <div class="session-info">
-                            <div class="session-name">${s.first_name} ${s.last_name}</div>
-                            <div class="session-meta">${shortId}</div>
+                            <div class="session-name">${s.first_name || 'User'} ${s.last_name || ''}</div>
+                            <div class="session-meta">
+                                <span>${shortId}</span> • <span style="font-size: 0.7rem; opacity: 0.8">${dateStr}</span>
+                            </div>
                         </div>
                         <button class="session-delete" onclick="event.stopPropagation(); deleteSessionById('${s.session_id}')">✕</button>
                     </div>`;
@@ -182,9 +215,15 @@ async function deleteSessionById(sessionId) {
     
     try {
         await API.deleteSession(sessionId);
+        
+        // If we deleted the "last session" stored in local storage, clear it
+        if (localStorage.getItem("zep_last_session_id") === sessionId) {
+            localStorage.removeItem("zep_last_session_id");
+        }
+
         if (sessionId === state.sessionId) {
             state.sessionId = null;
-            state.userId = null;
+            // state.userId = null; // Keep user ID!
             closeSessionsModal();
             initSession(true);
         } else {
