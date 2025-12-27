@@ -961,3 +961,71 @@ input[type="radio"] {
   color: var(--ctp-red);
   background: rgba(243, 139, 168, 0.1);
 }
+
+.zep-context-block {
+    margin: 0.5rem 1rem !important;
+    max-width: 800px;
+}
+
+.zep-context-block details summary {
+    list-style: none; /* Remove default marker */
+}
+.zep-context-block details summary::-webkit-details-marker {
+    display: none;
+}
+.zep-context-block details summary::before {
+    content: '▶';
+    font-size: 0.7em;
+    margin-right: 5px;
+    display: inline-block;
+    transition: transform 0.2s;
+}
+.zep-context-block details[open] summary::before {
+    transform: rotate(90deg);
+}
+
+.zep-context-block .context-content {
+    font-size: 0.75rem;
+    padding: 0.8rem;
+    border-left: 2px solid var(--ctp-surface2);
+    margin-top: 0.5rem;
+    color: var(--ctp-subtext0);
+    white-space: pre-wrap;
+    font-family: 'JetBrains Mono', 'Fira Code', var(--font-mono);
+    background: rgba(30, 30, 46, 0.4);
+    border-radius: 0 4px 4px 0;
+}
+
+.zep-context-block {
+    margin: 0.5rem 1rem !important;
+    max-width: 800px;
+}
+
+.zep-context-block details summary {
+    list-style: none; /* Remove default marker */
+}
+.zep-context-block details summary::-webkit-details-marker {
+    display: none;
+}
+.zep-context-block details summary::before {
+    content: '▶';
+    font-size: 0.7em;
+    margin-right: 5px;
+    display: inline-block;
+    transition: transform 0.2s;
+}
+.zep-context-block details[open] summary::before {
+    transform: rotate(90deg);
+}
+
+.zep-context-block .context-content {
+    font-size: 0.75rem;
+    padding: 0.8rem;
+    border-left: 2px solid var(--ctp-surface2);
+    margin-top: 0.5rem;
+    color: var(--ctp-subtext0);
+    white-space: pre-wrap;
+    font-family: 'JetBrains Mono', 'Fira Code', var(--font-mono);
+    background: rgba(30, 30, 46, 0.4);
+    border-radius: 0 4px 4px 0;
+}

@@ -146,12 +146,32 @@ class ZepService:
                     "user_id": thread.user_id,
                     "first_name": meta.get("first_name", "User"),
                     "last_name": meta.get("last_name", ""),
-                    "created_at": getattr(thread, "created_at", ""),
+                    "created_at": str(getattr(thread, "created_at", "")),
                 })
             return sessions
         except Exception as e:
             logger.error(f"Error listing sessions: {e}")
             return []
+
+    async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Get session details (metadata)."""
+        try:
+            thread = await self.client.thread.get(session_id)
+            if not thread:
+                return None
+            meta = getattr(thread, "metadata", {}) or {}
+            
+            return {
+                "session_id": thread.thread_id,
+                "user_id": getattr(thread, "user_id", ""),
+                "first_name": meta.get("first_name", "User"),
+                "last_name": meta.get("last_name", ""),
+                "created_at": str(getattr(thread, "created_at", "")),
+            }
+        except Exception as e:
+            # logger.error(f"Error getting session {session_id}: {e}")
+            pass
+        return None
 
     async def get_session_messages(self, session_id: str) -> List[Dict[str, Any]]:
         """Get session messages (history)."""
@@ -160,9 +180,9 @@ class ZepService:
             messages = getattr(response, "messages", [])
             return [
                 {
-                    "role": getattr(m, "role", "user"), 
-                    "content": getattr(m, "content", ""),
-                    "created_at": getattr(m, "created_at", "")
+                    "role": str(getattr(m, "role", "user")), 
+                    "content": str(getattr(m, "content", "")),
+                    "created_at": str(getattr(m, "created_at", ""))
                 } 
                 for m in messages
             ]
