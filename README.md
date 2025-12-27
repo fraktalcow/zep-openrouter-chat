@@ -29,15 +29,15 @@ Lightweight AI chat with **Zep Knowledge Graph** and **OpenRouter AI** for conte
 git clone <repo-url>
 cd zep-openrouter-agent
 
-# Create virtual environment
-python3 -m venv .venv
+# Install dependencies
+uv sync
 
 # Configure
 cp backend/.env.example backend/.env
 # Edit backend/.env with API keys
 
 # Run
-python run.py
+uv run run.py
 ```
 
 ## Configuration

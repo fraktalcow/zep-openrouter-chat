@@ -1,5 +1,4 @@
 from typing import Any, Dict, List, Optional
-import asyncio
 from zep_cloud.client import AsyncZep
 from zep_cloud.types.message import Message
 
@@ -168,7 +167,7 @@ class ZepService:
                 "last_name": meta.get("last_name", ""),
                 "created_at": str(getattr(thread, "created_at", "")),
             }
-        except Exception as e:
+        except Exception:
             # logger.error(f"Error getting session {session_id}: {e}")
             pass
         return None

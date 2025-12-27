@@ -6,7 +6,7 @@ Supports PDF, TXT, MD, and DOCX file formats.
 """
 
 import io
-from typing import Dict, Optional, List, Any
+from typing import Optional, List
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel, Field
 
