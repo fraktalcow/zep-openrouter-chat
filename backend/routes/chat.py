@@ -49,37 +49,28 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
     """Stream chat response with context from Zep memory and graph."""
     context_sections = {"memory_section": "", "graph_section": "", "rag_section": ""}
     rag_chunks = []
-    session_meta = None
+    use_zep = request.use_memory or request.use_retrieval
     
     zep_service = get_zep_service()
     openrouter_service = get_openrouter_service()
     
-    # Get session if Zep services enabled
-    if request.use_memory or request.use_retrieval:
-        try:
-            session_meta = await asyncio.wait_for(
-                zep_service.get_session(request.session_id), timeout=5.0
-            )
-            if not session_meta:
-                logger.warning(f"[Chat] Session {request.session_id} not found")
-        except Exception as e:
-            logger.warning(f"[Chat] Session retrieval failed: {e}")
-            session_meta = None
-            
-        if session_meta:
-            yield f"data: {json.dumps({'type': 'step', 'id': 'retrieval', 'message': 'Retrieving context...'})}\n\n"
+    # Signal that we're retrieving context
+    if use_zep:
+        yield f"data: {json.dumps({'type': 'step', 'id': 'retrieval', 'message': 'Retrieving Zep context...'})}\n\n"
 
     # Parallel retrieval
     tasks = {}
     
-    if session_meta:
+    if use_zep:
         # Add user message AND retrieve context in one go
-        tasks['zep'] = zep_service.add_memory(
+        tasks['zep_add'] = zep_service.add_memory(
             session_id=request.session_id,
             role="user",
             content=request.message,
             return_context=True
         )
+        # Also get context separately as a fallback (Zep may not return context with add_messages immediately)
+        tasks['zep_context'] = zep_service.get_context(session_id=request.session_id)
     
     if request.use_rag:
         pinecone = get_pinecone_service()
@@ -101,18 +92,31 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
         results_map = dict(zip(tasks.keys(), results))
 
         # Process Zep Context (Summary + Facts)
-        if 'zep' in results_map:
-            res = results_map['zep']
+        # Prefer context from add_messages, fallback to get_context
+        zep_context = None
+        if 'zep_add' in results_map:
+            res = results_map['zep_add']
             if isinstance(res, Exception):
-                logger.error(f"Zep Error: {res}")
+                logger.error(f"Zep add_memory Error: {res}")
             elif res:
-                # The 'res' here is the context string returned by add_messages(return_context=True)
-                # It contains <USER_SUMMARY> and <FACTS> sections.
-                # We can put it directly into memory_section for now, or assume it covers graph too.
-                context_sections["memory_section"] = res
-                # graph_section is likely included in the Facts part of the response, so we might leave it empty
-                # or we can parse it if we really want to split it.
-
+                zep_context = res
+                logger.info(f"[Chat] Got context from add_memory: len={len(res)}")
+        
+        # Fallback to get_context if add_memory didn't return context
+        if not zep_context and 'zep_context' in results_map:
+            res = results_map['zep_context']
+            if isinstance(res, Exception):
+                logger.error(f"Zep get_context Error: {res}")
+            elif res:
+                zep_context = res
+                logger.info(f"[Chat] Got context from get_context fallback: len={len(res)}")
+        
+        if zep_context:
+            # The context contains <USER_SUMMARY> and <FACTS> sections
+            context_sections["memory_section"] = zep_context
+            logger.info(f"[Chat] Zep context block set, len={len(zep_context)}")
+        else:
+            logger.warning("[Chat] No Zep context returned from either method")
                 
         # Process RAG
         if 'rag' in results_map:
@@ -163,7 +167,7 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
             
             logger.info(f"[Chat] LLM complete, len={len(full_response)}")
             
-            if session_meta and (request.use_memory or request.use_retrieval):
+            if use_zep:
                 background_tasks.add_task(zep_service.add_memory, request.session_id, "assistant", full_response)
             
             yield f"data: {json.dumps({'type': 'done', 'response': full_response})}\n\n"
@@ -179,7 +183,6 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
 
 @router.post("")
 async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
-    """Chat endpoint with streaming SSE response."""
     """Chat endpoint with streaming SSE response."""
     # Note: User memory is now added INSIDE _stream_chat_response to get context immediately.
 

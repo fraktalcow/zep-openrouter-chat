@@ -86,7 +86,7 @@ export function updateLoadingStatus(element, statusText, color = null) {
 }
 
 /**
- * Display context block in chat.
+ * Display context block in chat with beautiful streaming animation.
  * @param {{sections: {memory_section: string}}} data - Context data
  */
 export function displayContextBlock(data) {
@@ -96,32 +96,134 @@ export function displayContextBlock(data) {
     const chatBox = getChatBox();
     if (!chatBox) return;
 
-    const div = document.createElement("div");
-    div.className = "zep-context-block";
-    div.style.cssText = "margin: 0.5rem 1rem;";
-
-    const details = document.createElement("details");
-    const summary = document.createElement("summary");
-    summary.style.cssText = `cursor: pointer; color: ${COLORS.lavender}; font-size: 0.8rem; font-family: var(--font-mono);`;
-    summary.innerHTML = `<strong>Zep Context</strong> (Summary & Facts)`;
-    details.appendChild(summary);
-
-    const contentDiv = document.createElement("div");
-    contentDiv.style.cssText = `font-size: 0.75rem; padding: 0.5rem; border-left: 2px solid ${COLORS.surface2}; margin-top: 0.3rem; color: ${COLORS.subtext0}; white-space: pre-wrap; font-family: var(--font-mono);`;
+    // Parse the context to extract USER_SUMMARY and FACTS
+    const summaryMatch = contextContent.match(/<USER_SUMMARY>([\s\S]*?)<\/USER_SUMMARY>/);
+    const factsMatch = contextContent.match(/<FACTS>([\s\S]*?)<\/FACTS>/);
     
-    // Basic formatting to highlight headers
-    let formattedContent = contextContent
-        .replace(/<USER_SUMMARY>/g, '<span style="color:var(--ctp-green); font-weight:bold">&lt;USER_SUMMARY&gt;</span>')
-        .replace(/<\/USER_SUMMARY>/g, '<span style="color:var(--ctp-green); font-weight:bold">&lt;/USER_SUMMARY&gt;</span>')
-        .replace(/<FACTS>/g, '<span style="color:var(--ctp-blue); font-weight:bold">&lt;FACTS&gt;</span>')
-        .replace(/<\/FACTS>/g, '<span style="color:var(--ctp-blue); font-weight:bold">&lt;/FACTS&gt;</span>');
+    const userSummary = summaryMatch ? summaryMatch[1].trim() : null;
+    const factsRaw = factsMatch ? factsMatch[1].trim() : null;
+    
+    // Parse facts into individual items
+    const facts = factsRaw ? factsRaw.split('\n').filter(f => f.trim().startsWith('-')).map(f => f.trim().substring(1).trim()) : [];
 
-    contentDiv.innerHTML = formattedContent;
-    details.appendChild(contentDiv);
-    div.appendChild(details);
+    // Create the context showcase container
+    const container = document.createElement("div");
+    container.className = "zep-context-showcase";
+    container.innerHTML = `
+        <div class="context-header">
+            <div class="context-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                    <path d="M2 17l10 5 10-5"/>
+                    <path d="M2 12l10 5 10-5"/>
+                </svg>
+            </div>
+            <span class="context-title">Zep Memory Context</span>
+            <span class="context-badge">Live</span>
+        </div>
+        <div class="context-body">
+            ${userSummary ? `
+            <div class="context-section summary-section">
+                <div class="section-label">
+                    <span class="label-icon">👤</span>
+                    <span>User Summary</span>
+                </div>
+                <div class="section-content summary-content"></div>
+            </div>
+            ` : ''}
+            ${facts.length > 0 ? `
+            <div class="context-section facts-section">
+                <div class="section-label">
+                    <span class="label-icon">💡</span>
+                    <span>Known Facts</span>
+                    <span class="facts-count">${facts.length}</span>
+                </div>
+                <div class="section-content facts-content"></div>
+            </div>
+            ` : ''}
+        </div>
+    `;
 
-    chatBox.appendChild(div);
+    chatBox.appendChild(container);
     scrollToBottom();
+
+    // Animate the content with typewriter effect
+    if (userSummary) {
+        const summaryEl = container.querySelector('.summary-content');
+        streamText(summaryEl, userSummary, 8);
+    }
+
+    if (facts.length > 0) {
+        const factsEl = container.querySelector('.facts-content');
+        // Delay facts animation to start after summary
+        setTimeout(() => {
+            streamFacts(factsEl, facts);
+        }, userSummary ? Math.min(userSummary.length * 8, 1500) : 0);
+    }
+}
+
+/**
+ * Stream text with typewriter effect.
+ * @param {HTMLElement} element - Target element
+ * @param {string} text - Text to stream
+ * @param {number} delay - Delay per character in ms
+ */
+function streamText(element, text, delay = 10) {
+    let index = 0;
+    element.textContent = '';
+    element.classList.add('streaming');
+    
+    const interval = setInterval(() => {
+        if (index < text.length) {
+            element.textContent += text[index];
+            index++;
+            // Auto-scroll as content grows
+            const chatBox = getChatBox();
+            if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
+        } else {
+            clearInterval(interval);
+            element.classList.remove('streaming');
+            element.classList.add('complete');
+        }
+    }, delay);
+}
+
+/**
+ * Stream facts with staggered animation.
+ * @param {HTMLElement} container - Target container
+ * @param {string[]} facts - Array of facts
+ */
+function streamFacts(container, facts) {
+    container.innerHTML = '';
+    
+    facts.forEach((fact, index) => {
+        setTimeout(() => {
+            const factEl = document.createElement('div');
+            factEl.className = 'fact-item';
+            
+            // Parse date range if present
+            const dateMatch = fact.match(/\(([^)]+)\)$/);
+            const factText = dateMatch ? fact.replace(dateMatch[0], '').trim() : fact;
+            const dateRange = dateMatch ? dateMatch[1] : null;
+            
+            factEl.innerHTML = `
+                <span class="fact-bullet">•</span>
+                <span class="fact-text">${factText}</span>
+                ${dateRange ? `<span class="fact-date">${dateRange}</span>` : ''}
+            `;
+            
+            container.appendChild(factEl);
+            
+            // Trigger animation
+            requestAnimationFrame(() => {
+                factEl.classList.add('visible');
+            });
+            
+            // Scroll to bottom
+            const chatBox = getChatBox();
+            if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
+        }, index * 150); // Stagger each fact by 150ms
+    });
 }
 
 /**

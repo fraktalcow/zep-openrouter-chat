@@ -54,17 +54,31 @@ class ZepService:
             pass  # User may already exist
 
     async def add_memory(self, session_id: str, role: str, content: str, return_context: bool = False) -> Optional[str]:
+        """Add a message to Zep memory and optionally return the context block."""
         try:
             response = await self.client.thread.add_messages(
                 thread_id=session_id, 
                 messages=[Message(role=role, content=content)],
                 return_context=return_context
             )
-            if return_context:
-                return getattr(response, "context", None)
+            if return_context and response:
+                context = getattr(response, "context", None)
+                logger.info(f"[Zep] add_memory context returned: {bool(context)}, len={len(context) if context else 0}")
+                return context
             return None
         except Exception as e:
             logger.error(f"Error adding memory: {e}")
+            return None
+
+    async def get_context(self, session_id: str) -> Optional[str]:
+        """Get the Zep context block (user summary + facts) for a thread."""
+        try:
+            response = await self.client.thread.get_user_context(thread_id=session_id)
+            context = getattr(response, "context", None)
+            logger.info(f"[Zep] get_user_context returned: {bool(context)}, len={len(context) if context else 0}")
+            return context
+        except Exception as e:
+            logger.error(f"Error getting context: {e}")
             return None
 
 
