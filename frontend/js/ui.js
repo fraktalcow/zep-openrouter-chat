@@ -86,7 +86,7 @@ export function updateLoadingStatus(element, statusText, color = null) {
 }
 
 /**
- * Display context block in chat with beautiful streaming animation.
+ * Display context block in chat with minimal collapsible UI.
  * @param {{sections: {memory_section: string}}} data - Context data
  */
 export function displayContextBlock(data) {
@@ -106,59 +106,62 @@ export function displayContextBlock(data) {
     // Parse facts into individual items
     const facts = factsRaw ? factsRaw.split('\n').filter(f => f.trim().startsWith('-')).map(f => f.trim().substring(1).trim()) : [];
 
-    // Create the context showcase container
-    const container = document.createElement("div");
-    container.className = "zep-context-showcase";
-    container.innerHTML = `
-        <div class="context-header">
-            <div class="context-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                    <path d="M2 17l10 5 10-5"/>
-                    <path d="M2 12l10 5 10-5"/>
-                </svg>
+    // Create the context showcase container using details for auto-collapse
+    const details = document.createElement("details");
+    details.className = "zep-context-showcase";
+    details.open = true; // Open by default, let user close it if too big
+    
+    details.innerHTML = `
+        <summary class="context-main-summary">
+            <div class="context-header-left">
+                <i class="fa-solid fa-brain" style="font-size: 0.9rem;"></i>
+                <span>Zep Memory Context</span>
+                <span class="context-badge">Live</span>
             </div>
-            <span class="context-title">Zep Memory Context</span>
-            <span class="context-badge">Live</span>
-        </div>
+            <i class="fa-solid fa-chevron-down toggle-icon"></i>
+        </summary>
         <div class="context-body">
             ${userSummary ? `
-            <div class="context-section summary-section">
-                <div class="section-label">
-                    <span class="label-icon">👤</span>
+            <details class="inner-section" open>
+                <summary class="inner-summary">
+                    <i class="fa-solid fa-user-circle"></i>
                     <span>User Summary</span>
-                </div>
-                <div class="section-content summary-content"></div>
-            </div>
+                    <i class="fa-solid fa-chevron-down toggle-icon" style="margin-left: auto;"></i>
+                </summary>
+                <div class="inner-content summary-content"></div>
+            </details>
             ` : ''}
             ${facts.length > 0 ? `
-            <div class="context-section facts-section">
-                <div class="section-label">
-                    <span class="label-icon">💡</span>
+            <details class="inner-section" open>
+                <summary class="inner-summary">
+                    <i class="fa-solid fa-lightbulb"></i>
                     <span>Known Facts</span>
-                    <span class="facts-count">${facts.length}</span>
-                </div>
-                <div class="section-content facts-content"></div>
-            </div>
+                    <span class="context-badge" style="margin-left: 0.5rem; background: rgba(137, 180, 250, 0.2); color: var(--ctp-blue);">${facts.length}</span>
+                    <i class="fa-solid fa-chevron-down toggle-icon" style="margin-left: auto;"></i>
+                </summary>
+                <div class="inner-content facts-content"></div>
+            </details>
             ` : ''}
         </div>
     `;
 
-    chatBox.appendChild(container);
+    chatBox.appendChild(details);
     scrollToBottom();
 
     // Animate the content with typewriter effect
     if (userSummary) {
-        const summaryEl = container.querySelector('.summary-content');
-        streamText(summaryEl, userSummary, 8);
+        const summaryEl = details.querySelector('.summary-content');
+        if(summaryEl) streamText(summaryEl, userSummary, 8);
     }
 
     if (facts.length > 0) {
-        const factsEl = container.querySelector('.facts-content');
-        // Delay facts animation to start after summary
-        setTimeout(() => {
-            streamFacts(factsEl, facts);
-        }, userSummary ? Math.min(userSummary.length * 8, 1500) : 0);
+        const factsEl = details.querySelector('.facts-content');
+        if(factsEl) {
+            // Delay facts animation to start after summary
+            setTimeout(() => {
+                streamFacts(factsEl, facts);
+            }, userSummary ? Math.min(userSummary.length * 8, 1500) : 0);
+        }
     }
 }
 
@@ -311,6 +314,74 @@ export function renderRagSources(sources) {
 }
 
 /**
+ * Display usage metrics below an assistant message with minimal pill design.
+ * @param {HTMLElement} messageEl - The assistant message element
+ * @param {object} metrics - Metrics object with tokens, cost, duration
+ */
+export function displayUsageMetrics(messageEl, metrics) {
+    if (!messageEl || !metrics) return;
+    
+    // Remove existing metrics if any
+    const existing = messageEl.querySelector('.usage-metrics');
+    if (existing) existing.remove();
+    
+    // Validate we have at least some meaningful data
+    if (!metrics.total_tokens && !metrics.duration) return;
+
+    const metricsDiv = document.createElement('div');
+    metricsDiv.className = 'usage-metrics';
+    
+    const items = [];
+    
+    // Tokens - Minimal Badge
+    if (metrics.total_tokens !== undefined) {
+        const pTokens = metrics.prompt_tokens || 0;
+        const cTokens = metrics.completion_tokens || 0;
+        const tTokens = metrics.total_tokens;
+        // Tooltip for details
+        const title = `Total: ${tTokens}\nPrompt: ${pTokens}\nCompletion: ${cTokens}`;
+        
+        items.push(`
+            <div class="metric-pill tokens" title="${title}">
+                <span class="metric-icon">🔢</span>
+                <span class="metric-value">${tTokens.toLocaleString()}</span>
+                <span class="metric-sub">Tokens</span>
+            </div>
+        `);
+    }
+    
+    // Cost
+    if (metrics.cost !== undefined && metrics.cost > 0) {
+        const costStr = metrics.cost < 0.01 ? metrics.cost.toFixed(6) : metrics.cost.toFixed(4);
+        items.push(`
+            <div class="metric-pill cost" title="Estimated Cost">
+                <span class="metric-icon">💰</span>
+                <span class="metric-value">$${costStr}</span>
+            </div>
+        `);
+    }
+    
+    // Latency
+    if (metrics.duration !== undefined) {
+        items.push(`
+            <div class="metric-pill latency" title="Generation Latency">
+                <span class="metric-icon">⏱️</span>
+                <span class="metric-value">${metrics.duration.toFixed(2)}s</span>
+            </div>
+        `);
+    }
+    
+    if (items.length > 0) {
+        metricsDiv.innerHTML = `
+            <div class="metrics-container">
+                ${items.join('')}
+            </div>
+        `;
+        messageEl.appendChild(metricsDiv);
+    }
+}
+
+/**
  * Show a toast notification for important messages (errors, status codes).
  * @param {string} message - Message to display
  * @param {"error"|"warning"|"info"} type - Toast type
@@ -372,3 +443,4 @@ export function showToast(message, type = "error", duration = 5000) {
         setTimeout(() => toast.remove(), duration);
     }
 }
+

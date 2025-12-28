@@ -155,6 +155,9 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
         yield f"data: {json.dumps({'type': 'step', 'id': 'llm', 'message': 'Generating...'})}\n\n"
         
         full_response = ""
+        usage_metrics = None
+        start_time = asyncio.get_event_loop().time()
+        
         try:
             async for chunk in openrouter_service.generate_response_stream(
                 prompt,
@@ -162,15 +165,46 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
                 temperature=request.temperature,
                 max_tokens=request.max_tokens
             ):
+                # Check if this is usage data
+                if chunk.startswith("__USAGE__"):
+                    usage_json = chunk[9:]  # Remove __USAGE__ prefix
+                    try:
+                        usage_metrics = json.loads(usage_json)
+                    except json.JSONDecodeError:
+                        logger.warning(f"[Chat] Failed to parse usage data: {usage_json}")
+                    continue
+                
                 full_response += chunk
                 yield f"data: {json.dumps({'type': 'content', 'chunk': chunk})}\n\n"
             
-            logger.info(f"[Chat] LLM complete, len={len(full_response)}")
+            end_time = asyncio.get_event_loop().time()
+            duration = end_time - start_time
+            
+            logger.info(f"[Chat] LLM complete, len={len(full_response)}, duration={duration:.2f}s")
+            
+            # Build metrics object
+            metrics = {
+                "duration": round(duration, 3), # Higher precision
+            }
+            
+            if usage_metrics:
+                metrics["prompt_tokens"] = usage_metrics.get("prompt_tokens", 0)
+                metrics["completion_tokens"] = usage_metrics.get("completion_tokens", 0)
+                metrics["total_tokens"] = usage_metrics.get("total_tokens", 0)
+                # OpenRouter provides cost, or we might need to calculate it. 
+                # OpenRouter usually provides it in the response model if using their API normalization, 
+                # but standard 'usage' object just has tokens. 
+                # However, our OpenRouterService might pass it if available.
+                # Let's trust usage_metrics has what we need.
+                if "cost" in usage_metrics:
+                     metrics["cost"] = usage_metrics["cost"]
+                
+                logger.info(f"[Chat] Metrics: {metrics}")
             
             if use_zep:
                 background_tasks.add_task(zep_service.add_memory, request.session_id, "assistant", full_response)
             
-            yield f"data: {json.dumps({'type': 'done', 'response': full_response})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'response': full_response, 'metrics': metrics})}\n\n"
             
         except Exception as e:
             logger.error(f"[Chat] LLM error: {e}")

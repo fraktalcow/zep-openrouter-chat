@@ -114,6 +114,7 @@ class OpenRouterService:
             "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": True,
+            "usage": {"include": True},  # Enable usage accounting for tokens, cost, etc.
         }
         
         logger.info(f"[OpenRouter] STREAM POST {url}")
@@ -134,6 +135,8 @@ class OpenRouterService:
                         return
                     
                     chunk_count = 0
+                    usage_data = None  # Store usage data when received
+                    
                     async for line in response.aiter_lines():
                         # Skip empty lines
                         if not line:
@@ -149,6 +152,9 @@ class OpenRouterService:
                         # End of stream marker
                         if data_str == "[DONE]":
                             logger.info(f"[OpenRouter] Stream complete | chunks={chunk_count}")
+                            # Yield usage data if available
+                            if usage_data:
+                                yield f"__USAGE__{json.dumps(usage_data)}"
                             return
                         
                         try:
@@ -161,6 +167,11 @@ class OpenRouterService:
                                 logger.error(f"[OpenRouter] Event error: {err_msg}")
                                 yield f"⚠️ {err_msg}"
                                 return
+                            
+                            # Capture usage data if present
+                            if "usage" in event:
+                                usage_data = event["usage"]
+                                logger.info(f"[OpenRouter] Usage data received: {usage_data}")
                             
                             # Standard Chat Completions streaming format:
                             # choices[0].delta.content contains the text chunk

@@ -144,6 +144,11 @@ export async function sendMessage(state) {
                         fullResponse = data.response || fullResponse;
                         if (assistantMsgEl) {
                             assistantMsgEl.innerHTML = parseMarkdown(fullResponse);
+                            
+                            // Display usage metrics if available
+                            if (data.metrics) {
+                                UI.displayUsageMetrics(assistantMsgEl, data.metrics);
+                            }
                         }
                         UI.scrollToBottom();
                     } 
