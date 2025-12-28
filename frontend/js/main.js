@@ -21,9 +21,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function setupEventListeners() {
     document.getElementById("send-btn")?.addEventListener("click", handleSendMessage);
-    document.getElementById("message-input")?.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") handleSendMessage();
-    });
+    const messageInput = document.getElementById("message-input");
+    if (messageInput) {
+        messageInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        });
+        
+        const autoResize = () => {
+             messageInput.style.height = 'auto'; 
+             messageInput.style.height = (messageInput.scrollHeight) + 'px';
+        };
+
+        messageInput.addEventListener("input", autoResize);
+        
+        // Initial resize if there's content
+        autoResize();
+    }
     
     // File upload handlers
     document.getElementById("upload-toggle-btn")?.addEventListener("click", () => {
@@ -67,10 +83,13 @@ async function initSession(forceNew = false) {
 
     const storedUserId = localStorage.getItem("zep_user_id");
     
+    // We pass the intention to the backend. 
+    // forceNew=true implies we want a FRESH session, meaning a new user context (empty facts).
     const payload = {
         first_name: document.getElementById("first-name")?.value || "User",
         last_name: document.getElementById("last-name")?.value || "",
-        user_id: storedUserId || undefined
+        user_id: storedUserId || undefined,
+        new_user: forceNew 
     };
 
     try {
@@ -81,6 +100,7 @@ async function initSession(forceNew = false) {
         UI.addMessage("system", "Session initialized.");
     } catch (e) {
         console.error("Session init failed", e);
+        UI.showToast("Failed to initialize session. Please try again.", "error"); 
     }
 }
 

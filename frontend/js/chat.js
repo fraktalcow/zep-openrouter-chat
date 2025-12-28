@@ -29,6 +29,7 @@ export async function sendMessage(state) {
     // UI Updates
     UI.addMessage("user", text);
     input.value = "";
+    input.style.height = "auto";
     input.disabled = true;
     
     const sendBtn = document.getElementById("send-btn");
