@@ -119,9 +119,28 @@
         </div>
         <div
           class="panel-content"
-          style="padding: 0; flex-direction: column; display: flex"
+          style="padding: 0; flex-direction: column; display: flex; position: relative"
         >
           <div id="graph-container" style="height: 100%; width: 100%"></div>
+          
+          <!-- Empty State -->
+          <div id="graph-empty-message" class="graph-empty-state" style="display: none">
+            <i class="fa-solid fa-circle-nodes" style="font-size: 2rem; margin-bottom: 1rem; opacity: 0.5;"></i>
+            <h3>No Knowledge Graph Yet</h3>
+            <p>Chat with the agent to build a semantic memory graph.</p>
+          </div>
+
+          <!-- Node Details Overlay -->
+          <div id="graph-details-overlay" class="graph-details hidden">
+            <div class="details-header">
+              <span id="details-title">Node Name</span>
+              <button class="close-btn" onclick="document.getElementById('graph-details-overlay').classList.add('hidden')">✕</button>
+            </div>
+            <div id="details-content" class="details-content">
+              Select a node to see details.
+            </div>
+          </div>
+
           <div class="graph-stats">
             <div class="stat-item">
               <div id="node-count" class="stat-value">0</div>

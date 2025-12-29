@@ -1,3 +1,5 @@
+"""Chat routes with message persistence and LLM interaction logging."""
+
 import asyncio
 from fastapi import APIRouter, BackgroundTasks
 from fastapi.responses import StreamingResponse
@@ -45,6 +47,55 @@ class ChatRequest(BaseModel):
     max_tokens: int = Field(default=1024, ge=1, le=100000)
 
 
+async def _persist_message(session_id: str, role: str, content: str, llm_params: dict = None, usage: dict = None):
+    """Background task to persist message to PostgreSQL."""
+    try:
+        from db import get_db_context
+        from db.repositories import MessageRepository
+        
+        async with get_db_context() as db:
+            message_repo = MessageRepository(db)
+            await message_repo.add(
+                session_id=session_id,
+                role=role,
+                content=content,
+                llm_params=llm_params,
+                usage=usage,
+            )
+    except Exception as e:
+        logger.warning(f"[Chat] Failed to persist message: {e}")
+
+
+async def _log_llm_interaction(
+    session_id: str,
+    model_name: str,
+    temperature: float,
+    max_tokens: int,
+    usage_metrics: dict,
+    duration: float,
+):
+    """Background task to log LLM interaction to PostgreSQL."""
+    try:
+        from db import get_db_context
+        from db.repositories import LLMInteractionRepository
+        
+        async with get_db_context() as db:
+            llm_repo = LLMInteractionRepository(db)
+            await llm_repo.log(
+                session_id=session_id,
+                model_name=model_name,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                prompt_tokens=usage_metrics.get("prompt_tokens"),
+                completion_tokens=usage_metrics.get("completion_tokens"),
+                total_tokens=usage_metrics.get("total_tokens"),
+                cost=usage_metrics.get("cost"),
+                duration_seconds=duration,
+            )
+    except Exception as e:
+        logger.warning(f"[Chat] Failed to log LLM interaction: {e}")
+
+
 async def _stream_chat_response(request: ChatRequest, background_tasks: BackgroundTasks):
     """Stream chat response with context from Zep memory and graph."""
     context_sections = {"memory_section": "", "graph_section": "", "rag_section": ""}
@@ -53,6 +104,16 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
     
     zep_service = get_zep_service()
     openrouter_service = get_openrouter_service()
+    
+    # Persist user message to PostgreSQL
+    background_tasks.add_task(
+        _persist_message,
+        request.session_id,
+        "user",
+        request.message,
+        {"model": request.model_name, "temperature": request.temperature},
+        None,
+    )
     
     # Signal that we're retrieving context
     if use_zep:
@@ -69,7 +130,7 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
             content=request.message,
             return_context=True
         )
-        # Also get context separately as a fallback (Zep may not return context with add_messages immediately)
+        # Also get context separately as a fallback
         tasks['zep_context'] = zep_service.get_context(session_id=request.session_id)
     
     if request.use_rag:
@@ -92,7 +153,6 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
         results_map = dict(zip(tasks.keys(), results))
 
         # Process Zep Context (Summary + Facts)
-        # Prefer context from add_messages, fallback to get_context
         zep_context = None
         if 'zep_add' in results_map:
             res = results_map['zep_add']
@@ -112,7 +172,6 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
                 logger.info(f"[Chat] Got context from get_context fallback: len={len(res)}")
         
         if zep_context:
-            # The context contains <USER_SUMMARY> and <FACTS> sections
             context_sections["memory_section"] = zep_context
             logger.info(f"[Chat] Zep context block set, len={len(zep_context)}")
         else:
@@ -155,7 +214,7 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
         yield f"data: {json.dumps({'type': 'step', 'id': 'llm', 'message': 'Generating...'})}\n\n"
         
         full_response = ""
-        usage_metrics = None
+        usage_metrics = {}
         start_time = asyncio.get_event_loop().time()
         
         try:
@@ -184,23 +243,45 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
             
             # Build metrics object
             metrics = {
-                "duration": round(duration, 3), # Higher precision
+                "duration": round(duration, 3),
             }
             
             if usage_metrics:
                 metrics["prompt_tokens"] = usage_metrics.get("prompt_tokens", 0)
                 metrics["completion_tokens"] = usage_metrics.get("completion_tokens", 0)
                 metrics["total_tokens"] = usage_metrics.get("total_tokens", 0)
-                # OpenRouter provides cost, or we might need to calculate it. 
-                # OpenRouter usually provides it in the response model if using their API normalization, 
-                # but standard 'usage' object just has tokens. 
-                # However, our OpenRouterService might pass it if available.
-                # Let's trust usage_metrics has what we need.
                 if "cost" in usage_metrics:
                      metrics["cost"] = usage_metrics["cost"]
                 
                 logger.info(f"[Chat] Metrics: {metrics}")
             
+            # Persist assistant message and log LLM interaction
+            llm_params = {
+                "model": request.model_name,
+                "temperature": request.temperature,
+                "max_tokens": request.max_tokens,
+            }
+            
+            background_tasks.add_task(
+                _persist_message,
+                request.session_id,
+                "assistant",
+                full_response,
+                llm_params,
+                usage_metrics,
+            )
+            
+            background_tasks.add_task(
+                _log_llm_interaction,
+                request.session_id,
+                request.model_name,
+                request.temperature,
+                request.max_tokens,
+                usage_metrics,
+                duration,
+            )
+            
+            # Also add to Zep for memory/graph
             if use_zep:
                 background_tasks.add_task(zep_service.add_memory, request.session_id, "assistant", full_response)
             
@@ -218,9 +299,6 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
 @router.post("")
 async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     """Chat endpoint with streaming SSE response."""
-    # Note: User memory is now added INSIDE _stream_chat_response to get context immediately.
-
-
     return StreamingResponse(
         _stream_chat_response(request, background_tasks),
         media_type="text/event-stream",

@@ -1205,3 +1205,81 @@ details[open] > summary .toggle-icon {
     margin-left: 3px;
     font-weight: 400;
 }
+
+/* ========================================
+   GRAPH DETAILS & OVERLAYS
+   ======================================== */
+
+.graph-details {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    right: 20px;
+    background: rgba(30, 30, 46, 0.95);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--ctp-lavender);
+    border-radius: var(--border-radius);
+    padding: 1rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    z-index: 100;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: translateY(0);
+    opacity: 1;
+}
+
+.graph-details.hidden {
+    transform: translateY(20px);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.details-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--ctp-surface0);
+}
+
+#details-title {
+    font-weight: 700;
+    color: var(--ctp-lavender);
+    font-size: 1rem;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: var(--ctp-surface2);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0;
+}
+
+.close-btn:hover {
+    color: var(--ctp-red);
+}
+
+.details-content {
+    font-size: 0.9rem;
+    color: var(--ctp-subtext0);
+    line-height: 1.5;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.graph-empty-state {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: var(--ctp-surface2);
+    width: 80%;
+}
+
+.graph-empty-state h3 {
+    margin-bottom: 0.5rem;
+    color: var(--ctp-subtext0);
+}

@@ -25,7 +25,24 @@ app.include_router(api_router)
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Server started. Services ready for lazy initialization.")
+    logger.info("Server starting...")
+    # Initialize database (create tables if needed)
+    try:
+        from db import init_db
+        await init_db()
+        logger.info("Database initialized.")
+    except Exception as e:
+        logger.warning(f"Database init skipped (may need PostgreSQL): {e}")
+    logger.info("Server ready.")
+
+@app.on_event("shutdown") 
+async def shutdown_event():
+    logger.info("Server shutting down...")
+    try:
+        from db import close_db
+        await close_db()
+    except Exception:
+        pass
 
 
 

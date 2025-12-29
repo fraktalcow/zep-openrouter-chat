@@ -53,7 +53,27 @@ function setupEventListeners() {
     
     document.getElementById("file-input")?.addEventListener("change", handleFileUpload);
     
+    
     window.addEventListener("resize", () => Graph.resizeGraph());
+
+    document.addEventListener("graph-node-selected", (e) => {
+        showGraphDetails(e.detail);
+    });
+}
+
+function showGraphDetails(node) {
+    const overlay = document.getElementById("graph-details-overlay");
+    const title = document.getElementById("details-title");
+    const content = document.getElementById("details-content");
+    
+    if (overlay && title && content) {
+        title.textContent = node.name;
+        // Format summary nicely (it might be Markdown or plain text)
+        content.innerHTML = typeof marked !== 'undefined' 
+            ? marked.parse(node.summary || "No detailed summary available.") 
+            : (node.summary || "No detailed summary available.");
+        overlay.classList.remove("hidden");
+    }
 }
 
 async function handleSendMessage() {

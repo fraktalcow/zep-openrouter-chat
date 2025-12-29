@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     RAG_TOP_K: int = 5
     RAG_NAMESPACE: str = "default"
     
+    # Database config
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/zep_chat"
+    DATABASE_ECHO: bool = False  # Set True for SQL query logging
+    
     class Config:
         env_file = Path(__file__).parent / ".env"
         extra = "ignore"
