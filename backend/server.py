@@ -26,13 +26,27 @@ app.include_router(api_router)
 @app.on_event("startup")
 async def startup_event():
     logger.info("Server starting...")
+    
     # Initialize database (create tables if needed)
+    db_ready = False
     try:
         from db import init_db
         await init_db()
+        db_ready = True
         logger.info("Database initialized.")
     except Exception as e:
         logger.warning(f"Database init skipped (may need PostgreSQL): {e}")
+    
+    # Sync existing Zep sessions to PostgreSQL
+    if db_ready:
+        try:
+            from sync_service import sync_zep_sessions_to_db
+            stats = await sync_zep_sessions_to_db(limit=50)
+            if stats["synced"] > 0:
+                logger.info(f"Synced {stats['synced']} sessions from Zep to DB")
+        except Exception as e:
+            logger.warning(f"Session sync skipped: {e}")
+    
     logger.info("Server ready.")
 
 @app.on_event("shutdown") 

@@ -111,6 +111,17 @@ async def get_session(session_id: str, db: AsyncSession = Depends(get_db)):
         
         if session:
             messages = await message_repo.get_history(session_id)
+            
+            # If no messages in DB, try syncing from Zep
+            if not messages:
+                try:
+                    from sync_service import sync_zep_messages_to_db
+                    synced = await sync_zep_messages_to_db(session_id)
+                    if synced > 0:
+                        messages = await message_repo.get_history(session_id)
+                except Exception:
+                    pass  # Continue with empty messages
+            
             meta = session.metadata_ or {}
             
             return {
@@ -139,6 +150,19 @@ async def get_session(session_id: str, db: AsyncSession = Depends(get_db)):
         
         if not session_data:
             raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Sync this session to DB for future access
+        try:
+            await session_repo.create(
+                session_id=session_id,
+                user_id=session_data.get("user_id", "unknown"),
+                zep_session_id=session_id,
+                first_name=session_data.get("first_name", "User"),
+                last_name=session_data.get("last_name", ""),
+            )
+            logger.info(f"Synced session {session_id} from Zep to DB")
+        except Exception:
+            pass  # May already exist
         
         messages = await service.get_session_messages(session_id)
         session_data["messages"] = messages
@@ -182,3 +206,51 @@ async def get_session_stats(session_id: str, db: AsyncSession = Depends(get_db))
         return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {e}")
+
+
+@router.post("/sync")
+async def sync_sessions():
+    """Manually sync all Zep sessions to PostgreSQL."""
+    try:
+        from sync_service import sync_zep_sessions_to_db
+        stats = await sync_zep_sessions_to_db(limit=100)
+        return {"status": "success", **stats}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sync failed: {e}")
+
+
+@router.post("/{session_id}/sync-messages")
+async def sync_session_messages(session_id: str):
+    """Sync messages for a specific session from Zep to PostgreSQL."""
+    try:
+        from sync_service import sync_zep_messages_to_db
+        synced = await sync_zep_messages_to_db(session_id)
+        return {"status": "success", "synced": synced, "session_id": session_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sync failed: {e}")
+
+
+@router.post("/{session_id}/sync-graph")
+async def sync_session_graph(session_id: str, db: AsyncSession = Depends(get_db)):
+    """Sync graph data for the user of this session."""
+    try:
+        session_repo = SessionRepository(db)
+        session = await session_repo.get_by_id(session_id)
+        
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        from sync_service import sync_graph_for_user
+        graph = await sync_graph_for_user(session.user_id)
+        
+        return {
+            "status": "success",
+            "user_id": session.user_id,
+            "nodes": len(graph.get("nodes", [])) if graph else 0,
+            "edges": len(graph.get("edges", [])) if graph else 0,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sync failed: {e}")
+
