@@ -1,7 +1,8 @@
 """Session management routes with PostgreSQL + Zep dual-write."""
 
 import uuid
-from typing import Optional
+from typing import Optional, List, Dict, Any
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,25 @@ class SessionRequest(BaseModel):
     last_name: str = ""
     user_id: Optional[str] = None
     new_user: bool = False  # Explicit flag to force a fresh user context
+
+class MessageResponse(BaseModel):
+    role: str
+    content: str
+    created_at: Optional[str] = None
+    llm_params: Optional[Dict[str, Any]] = None
+    usage: Optional[Dict[str, Any]] = None
+
+class SessionResponse(BaseModel):
+    session_id: str
+    user_id: str
+    first_name: str
+    last_name: str
+    title: Optional[str] = None
+    created_at: Optional[str] = None
+    messages: List[MessageResponse] = []
+
+class SessionListResponse(BaseModel):
+    sessions: List[Dict[str, Any]]
 
 
 @router.post("")
@@ -71,7 +91,7 @@ async def create_session(request: SessionRequest, db: AsyncSession = Depends(get
     }
 
 
-@router.get("/list")
+@router.get("/list", response_model=SessionListResponse)
 async def list_sessions(limit: int = 20, db: AsyncSession = Depends(get_db)):
     """List recent sessions from PostgreSQL (faster, better ordering)."""
     try:
@@ -92,14 +112,13 @@ async def list_sessions(limit: int = 20, db: AsyncSession = Depends(get_db)):
             })
         
         return {"sessions": result}
+        return {"sessions": result}
     except Exception as e:
-        logger.warning(f"PostgreSQL list failed, falling back to Zep: {e}")
-        # Fallback to Zep
-        sessions = await get_zep_service().list_sessions(limit)
-        return {"sessions": sessions}
+        logger.error(f"PostgreSQL list failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list sessions: {e}")
 
 
-@router.get("/{session_id}")
+@router.get("/{session_id}", response_model=SessionResponse)
 async def get_session(session_id: str, db: AsyncSession = Depends(get_db)):
     """Get session details and message history."""
     try:
@@ -109,68 +128,44 @@ async def get_session(session_id: str, db: AsyncSession = Depends(get_db)):
         # Try PostgreSQL first
         session = await session_repo.get_by_id(session_id)
         
-        if session:
-            messages = await message_repo.get_history(session_id)
-            
-            # If no messages in DB, try syncing from Zep
-            if not messages:
-                try:
-                    from sync_service import sync_zep_messages_to_db
-                    synced = await sync_zep_messages_to_db(session_id)
-                    if synced > 0:
-                        messages = await message_repo.get_history(session_id)
-                except Exception:
-                    pass  # Continue with empty messages
-            
-            meta = session.metadata_ or {}
-            
-            return {
-                "session_id": session.id,
-                "user_id": session.user_id,
-                "first_name": meta.get("first_name", "User"),
-                "last_name": meta.get("last_name", ""),
-                "title": session.title,
-                "created_at": session.created_at.isoformat() if session.created_at else None,
-                "messages": [
-                    {
-                        "role": m.role,
-                        "content": m.content,
-                        "created_at": m.created_at.isoformat() if m.created_at else None,
-                        "llm_params": m.llm_params,
-                        "usage": m.usage,
-                    }
-                    for m in messages
-                ],
-            }
-        
-        # Fallback to Zep if not in PostgreSQL
-        logger.info(f"Session {session_id} not in DB, checking Zep")
-        service = get_zep_service()
-        session_data = await service.get_session(session_id)
-        
-        if not session_data:
+        if not session:
+            logger.warning(f"Session {session_id} not found in DB")
             raise HTTPException(status_code=404, detail="Session not found")
         
-        # Sync this session to DB for future access
-        try:
-            await session_repo.create(
-                session_id=session_id,
-                user_id=session_data.get("user_id", "unknown"),
-                zep_session_id=session_id,
-                first_name=session_data.get("first_name", "User"),
-                last_name=session_data.get("last_name", ""),
-            )
-            logger.info(f"Synced session {session_id} from Zep to DB")
-        except Exception:
-            pass  # May already exist
+        messages = await message_repo.get_history(session_id)
+        meta = session.metadata_ or {}
         
-        messages = await service.get_session_messages(session_id)
-        session_data["messages"] = messages
-        return session_data
+        # Explicitly create lists of dicts
+        msg_list = []
+        for m in messages:
+            msg_list.append({
+                "role": m.role,
+                "content": m.content,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+                "llm_params": m.llm_params,
+                "usage": m.usage,
+            })
+
+        return {
+            "session_id": session.id,
+            "user_id": session.user_id,
+            "first_name": meta.get("first_name", "User"),
+            "last_name": meta.get("last_name", ""),
+            "title": session.title,
+            "created_at": session.created_at.isoformat() if session.created_at else None,
+            "messages": msg_list,
+        }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get session: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get session: {e}")
         
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Failed to get session: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get session: {e}")
 
 
@@ -253,4 +248,3 @@ async def sync_session_graph(session_id: str, db: AsyncSession = Depends(get_db)
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Sync failed: {e}")
-

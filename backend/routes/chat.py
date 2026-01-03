@@ -47,12 +47,12 @@ class ChatRequest(BaseModel):
     max_tokens: int = Field(default=1024, ge=1, le=100000)
 
 
+from db import get_db_context
+from db.repositories import MessageRepository, LLMInteractionRepository
+
 async def _persist_message(session_id: str, role: str, content: str, llm_params: dict = None, usage: dict = None):
     """Background task to persist message to PostgreSQL."""
     try:
-        from db import get_db_context
-        from db.repositories import MessageRepository
-        
         async with get_db_context() as db:
             message_repo = MessageRepository(db)
             await message_repo.add(
@@ -62,8 +62,9 @@ async def _persist_message(session_id: str, role: str, content: str, llm_params:
                 llm_params=llm_params,
                 usage=usage,
             )
+            # logger.debug(f"[Chat] Message persisted for {session_id}")
     except Exception as e:
-        logger.warning(f"[Chat] Failed to persist message: {e}")
+        logger.error(f"[Chat] CRITICAL: Failed to persist message: {e}", exc_info=True)
 
 
 async def _log_llm_interaction(
@@ -76,9 +77,6 @@ async def _log_llm_interaction(
 ):
     """Background task to log LLM interaction to PostgreSQL."""
     try:
-        from db import get_db_context
-        from db.repositories import LLMInteractionRepository
-        
         async with get_db_context() as db:
             llm_repo = LLMInteractionRepository(db)
             await llm_repo.log(

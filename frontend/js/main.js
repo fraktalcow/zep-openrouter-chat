@@ -249,9 +249,9 @@ async function loadSession(sessionId) {
         // Construct session data for active state
         const sessionData = {
             session_id: sessionId,
-            user_id: cached.user_id || state.userId, // keep current user if we don't know
-            first_name: cached.first_name || "User",
-            last_name: cached.last_name || ""
+            user_id: data.user_id || cached.user_id || state.userId,
+            first_name: data.first_name || cached.first_name || "User",
+            last_name: data.last_name || cached.last_name || ""
         };
         
         setActiveSession(sessionData);
