@@ -310,7 +310,7 @@ async function deleteSessionById(sessionId) {
 
 export async function refreshGraph() {
     try {
-        if (!state.userId) return;
+        if (!state.userId) return { nodes: 0, edges: 0 };
         const data = await API.fetchGraphData(state.userId);
         
         const container = document.getElementById("graph-container");
