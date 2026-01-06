@@ -24,8 +24,11 @@ You are a helpful assistant with access to conversation history and knowledge gr
 # Knowledge Graph
 {graph_section}
 
-# RAG Context
+# RAG Context (Relevant Documents)
 {rag_section}
+Use the above RAG context to answer the query if relevant. 
+Always cite the source using brackets like [1], [2] when using information from the RAG Context.
+If the context doesn't contain the answer, say so, but you can rely on your general knowledge.
 
 # User Query
 {query}
@@ -135,7 +138,7 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
         pinecone = get_pinecone_service()
         loop = asyncio.get_running_loop()
         tasks['rag'] = loop.run_in_executor(
-            None, lambda: pinecone.search(query=request.message, top_k=3, rerank=True)
+            None, lambda: pinecone.search(query=request.message, top_k=5, rerank=True)
         )
     
     if tasks:
@@ -182,27 +185,50 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
                 logger.error(f"RAG Error: {res}")
             elif res:
                 rag_texts = []
-                for r in res:
-                    if r.get("score", 0) > 0.4:
-                        rag_texts.append(f"- {r['text']}")
-                        rag_chunks.append({"text": r["text"], "score": r["score"]})
+                # Sort by score just in case
+                valid_results = sorted([r for r in res if r.get("score", 0) > 0.4], key=lambda x: x['score'], reverse=True)
+                
+                for i, r in enumerate(valid_results):
+                    citation_idx = i + 1
+                    source_name = r.get("metadata", {}).get("filename", "unknown")
+                    
+                    # Add to context text
+                    rag_texts.append(f"[{citation_idx}] {r['text']} (Source: {source_name})")
+                    
+                    # Add to client payload
+                    rag_chunks.append({
+                        "text": r["text"], 
+                        "score": r["score"],
+                        "citation_index": citation_idx,
+                        "source": source_name
+                    })
+                    
                 if rag_texts:
-                    context_sections["rag_section"] = "\n".join(rag_texts)
+                    context_sections["rag_section"] = "\n\n".join(rag_texts)
                     yield f"data: {json.dumps({'type': 'rag_sources', 'chunks': rag_chunks})}\n\n"
 
-    # Build prompt - only include non-empty sections
-    sections = []
-    if context_sections["memory_section"]:
-        sections.append(f"# Conversation Memory\n{context_sections['memory_section']}")
-    if context_sections["graph_section"]:
-        sections.append(f"# Knowledge Graph\n{context_sections['graph_section']}")
+    # Build prompt
+    # Use template if RAG is present, otherwise fallback to simpler concatenation
     if context_sections["rag_section"]:
-        sections.append(f"# RAG Context\n{context_sections['rag_section']}")
-    
-    if sections:
-        prompt = "\n\n".join(sections) + f"\n\n# User Query\n{request.message}\n\nRespond naturally."
+         # Replace placeholders
+         prompt = CONTEXT_TEMPLATE.format(
+             memory_section=context_sections.get("memory_section", "No memory context."),
+             graph_section=context_sections.get("graph_section", "No graph data."),
+             rag_section=context_sections["rag_section"],
+             query=request.message
+         )
     else:
-        prompt = request.message
+        # Legacy/Simple assembly for non-RAG or empty RAG
+        sections = []
+        if context_sections["memory_section"]:
+            sections.append(f"# Conversation Memory\n{context_sections['memory_section']}")
+        if context_sections["graph_section"]:
+            sections.append(f"# Knowledge Graph\n{context_sections['graph_section']}")
+        
+        if sections:
+            prompt = "\n\n".join(sections) + f"\n\n# User Query\n{request.message}\n\nRespond naturally."
+        else:
+            prompt = request.message
     
     logger.info(f"[Chat] Prompt length={len(prompt)}, model={request.model_name}")
     yield f"data: {json.dumps({'type': 'context', 'context_block': {'sections': context_sections}})}\n\n"

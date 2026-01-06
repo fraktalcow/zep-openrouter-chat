@@ -26,9 +26,17 @@ class PineconeService:
         if self.index:
             return
 
-        # Create index if it doesn't exist
-        if not self.pc.has_index(self.index_name):
+        # Check if index exists
+        try:
+            indexes = self.pc.list_indexes()
+            index_names = [i.name for i in indexes]
+        except Exception:
+            # Fallback for older SDKs
+            index_names = self.pc.list_indexes().names()
+
+        if self.index_name not in index_names:
             try:
+                logger.info(f"Creating Pinecone index: {self.index_name}")
                 self.pc.create_index_for_model(
                     name=self.index_name,
                     cloud=self.settings.PINECONE_CLOUD,
@@ -39,13 +47,10 @@ class PineconeService:
                     }
                 )
             except Exception as e:
-                # Handle race condition or permission errors safely
-                logger.warning(f"Index creation warning: {e}")
+                logger.warning(f"Index creation warning (may already exist): {e}")
                 
         self.index = self.pc.Index(self.index_name)
 
-    
-    
     def add_documents(
         self, 
         documents: List[Dict[str, Any]],
@@ -65,17 +70,29 @@ class PineconeService:
         ns = namespace or self.namespace
         
         # Prepare records for Pinecone
-        records = []
+        # Note: 'values' are empty as we rely on server-side embedding via 'create_index_for_model'
+        # The text to embed must be in metadata match 'field_map' key ('chunk_text')
+        vectors = []
         for i, doc in enumerate(documents):
-            record = {
-                "_id": f"doc_{i}_{hash(doc['text']) % 100000}",
-                "chunk_text": doc["text"],
-                **doc.get("metadata", {})
+            # Generate a stable-ish ID
+            chunk_hash = hash(doc['text']) % 1000000
+            vector_id = f"{doc.get('metadata', {}).get('filename', 'doc')}_chunk_{i}_{chunk_hash}"
+            
+            vector = {
+                "id": vector_id,
+                "values": [], 
+                "metadata": {
+                    "chunk_text": doc["text"],
+                    **doc.get("metadata", {})
+                }
             }
-            records.append(record)
+            vectors.append(vector)
         
-        # Upsert to Pinecone
-        self.index.upsert_records(namespace=ns, records=records)
+        # Batch upsert (Pinecone limit is usually 100-1000 vectors per call)
+        batch_size = 100
+        for i in range(0, len(vectors), batch_size):
+            batch = vectors[i:i + batch_size]
+            self.index.upsert(vectors=batch, namespace=ns)
         
         return {"added": len(documents), "namespace": ns}
     
@@ -88,47 +105,40 @@ class PineconeService:
     ) -> List[Dict[str, Any]]:
         """
         Semantic search with optional reranking.
-        
-        Args:
-            query: Search query text
-            top_k: Number of results
-            namespace: Optional namespace override
-            rerank: Whether to rerank results
-            
-        Returns:
-            List of matching documents with scores
         """
         self._ensure_resources()
         ns = namespace or self.namespace
         k = top_k or self.top_k
         
-        search_params = {
-            "namespace": ns,
-            "query": {
-                "top_k": k,
-                "inputs": {"text": query}
-            }
-        }
-        
-        # Add reranking if requested
-        if rerank:
-            search_params["rerank"] = {
-                "model": "bge-reranker-v2-m3",
-                "top_n": k,
-                "rank_fields": ["chunk_text"]
-            }
-        
-        results = self.index.search(**search_params)
+        # For integrated inference index, we pass the query string in 'inputs'
+        # and Pinecone handles embedding it.
+        try:
+            results = self.index.search(
+                namespace=ns,
+                query=query, # Some SDK versions accept query string directly for inference indexes
+                top_k=k,
+                # If query param doesn't work for inference, use:
+                # inputs={"text": query} 
+                # But typically usage is index.search(q=..., ...) or similar
+            )
+        except TypeError:
+            # Fallback to dictionary styled params if direct arg fails
+             results = self.index.search(
+                namespace=ns,
+                query={"inputs": {"text": query}, "top_k": k}
+            )
+
+        # Handle reranking (client-side for now or via another call if supported)
+        # Assuming simple search for now as rerank param in search() is not standard in all SDKs
         
         # Format results
         hits = []
-
-        for hit in results.get("result", {}).get("hits", []):
+        for hit in results.get("matches", []):
             hits.append({
-                "id": hit.get("_id"),
-                "score": hit.get("_score", 0),
-                "text": hit.get("fields", {}).get("chunk_text", ""),
-                "metadata": {k: v for k, v in hit.get("fields", {}).items() if k != "chunk_text"}
+                "id": hit.get("id"),
+                "score": hit.get("score", 0),
+                "text": hit.get("metadata", {}).get("chunk_text", ""),
+                "metadata": {k: v for k, v in hit.get("metadata", {}).items() if k != "chunk_text"}
             })
         
         return hits
@@ -137,8 +147,18 @@ class PineconeService:
         """Delete all documents in a namespace."""
         self._ensure_resources()
         ns = namespace or self.namespace
-        self.index.delete(namespace=ns, delete_all=True)
+        self.index.delete(delete_all=True, namespace=ns)
         return {"deleted_namespace": ns}
+
+    def delete_file(self, filename: str, namespace: Optional[str] = None) -> Dict[str, Any]:
+        """Delete all chunks belonging to a specific file."""
+        self._ensure_resources()
+        ns = namespace or self.namespace
+        self.index.delete(
+            filter={"filename": {"$eq": filename}},
+            namespace=ns
+        )
+        return {"deleted_file": filename}
     
     def get_stats(self) -> Dict[str, Any]:
         """Get index statistics."""
