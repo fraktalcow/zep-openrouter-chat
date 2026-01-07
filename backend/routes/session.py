@@ -9,11 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zep_service import get_zep_service
 from db import get_db
-from db.repositories import SessionRepository, MessageRepository
+from db.repositories import SessionRepository, MessageRepository, LLMInteractionRepository
 from logger import logger
 
 router = APIRouter()
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Request/Response Models
+# ─────────────────────────────────────────────────────────────────────────────
 
 class SessionRequest(BaseModel):
     first_name: str = "User"
@@ -21,12 +25,15 @@ class SessionRequest(BaseModel):
     user_id: Optional[str] = None
     new_user: bool = False  # Explicit flag to force a fresh user context
 
+
 class MessageResponse(BaseModel):
+    id: Optional[str] = None
     role: str
     content: str
     created_at: Optional[str] = None
     llm_params: Optional[Dict[str, Any]] = None
     usage: Optional[Dict[str, Any]] = None
+
 
 class SessionResponse(BaseModel):
     session_id: str
@@ -34,22 +41,49 @@ class SessionResponse(BaseModel):
     first_name: str
     last_name: str
     title: Optional[str] = None
+    is_archived: bool = False
     created_at: Optional[str] = None
+    updated_at: Optional[str] = None
     messages: List[MessageResponse] = []
+    message_count: int = 0
+
+
+class SessionListItem(BaseModel):
+    session_id: str
+    user_id: str
+    first_name: str
+    last_name: str
+    title: Optional[str] = None
+    is_archived: bool = False
+    created_at: Optional[str] = None
+    message_count: int = 0
+
 
 class SessionListResponse(BaseModel):
-    sessions: List[Dict[str, Any]]
+    sessions: List[SessionListItem]
+    total: int
 
 
-@router.post("")
+class SessionStatsResponse(BaseModel):
+    session_id: str
+    message_count: int
+    interaction_count: int
+    total_prompt_tokens: int
+    total_completion_tokens: int
+    total_tokens: int
+    total_cost: float
+    avg_duration: float
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Routes
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("", response_model=SessionResponse)
 async def create_session(request: SessionRequest, db: AsyncSession = Depends(get_db)):
     """Create a new session in both PostgreSQL and Zep."""
     
-    # Logic:
-    # 1. If new_user is True, ALWAYS generate a new user_id.
-    # 2. If user_id is provided and new_user is False, use provided user_id.
-    # 3. If no user_id and new_user is False, generate a new one.
-    
+    # Generate IDs
     if request.new_user:
         user_id = f"user_{uuid.uuid4().hex[:8]}"
     else:
@@ -72,7 +106,7 @@ async def create_session(request: SessionRequest, db: AsyncSession = Depends(get
     # 2. Store in PostgreSQL (for fast retrieval/ordering)
     try:
         session_repo = SessionRepository(db)
-        await session_repo.create(
+        session = await session_repo.create(
             session_id=session_id,
             user_id=user_id,
             zep_session_id=session_id,
@@ -83,38 +117,60 @@ async def create_session(request: SessionRequest, db: AsyncSession = Depends(get
         logger.error(f"PostgreSQL session creation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create session: {e}")
 
-    return {
-        "session_id": session_id,
-        "user_id": user_id,
-        "first_name": request.first_name,
-        "last_name": request.last_name,
-    }
+    return SessionResponse(
+        session_id=session_id,
+        user_id=user_id,
+        first_name=request.first_name,
+        last_name=request.last_name,
+        title=None,
+        is_archived=False,
+        created_at=session.created_at.isoformat() if session.created_at else None,
+        messages=[],
+        message_count=0,
+    )
 
 
 @router.get("/list", response_model=SessionListResponse)
-async def list_sessions(limit: int = 20, db: AsyncSession = Depends(get_db)):
-    """List recent sessions from PostgreSQL (faster, better ordering)."""
+async def list_sessions(
+    limit: int = 20,
+    offset: int = 0,
+    user_id: Optional[str] = None,
+    include_archived: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    """List sessions from PostgreSQL with pagination."""
     try:
         session_repo = SessionRepository(db)
-        sessions = await session_repo.list_all(limit=limit)
+        message_repo = MessageRepository(db)
         
-        # Format response
+        sessions = await session_repo.list_all(
+            limit=limit,
+            offset=offset,
+            user_id=user_id,
+            include_archived=include_archived,
+        )
+        total = await session_repo.count(user_id=user_id, include_archived=include_archived)
+        
+        # Build response with message counts
         result = []
         for s in sessions:
             meta = s.metadata_ or {}
-            result.append({
-                "session_id": s.id,
-                "user_id": s.user_id,
-                "first_name": meta.get("first_name", "User"),
-                "last_name": meta.get("last_name", ""),
-                "title": s.title,
-                "created_at": s.created_at.isoformat() if s.created_at else None,
-            })
+            msg_count = await message_repo.count(s.id)
+            result.append(SessionListItem(
+                session_id=s.id,
+                user_id=s.user_id,
+                first_name=meta.get("first_name", "User"),
+                last_name=meta.get("last_name", ""),
+                title=s.title,
+                is_archived=s.is_archived,
+                created_at=s.created_at.isoformat() if s.created_at else None,
+                message_count=msg_count,
+            ))
         
-        return {"sessions": result}
-        return {"sessions": result}
+        return SessionListResponse(sessions=result, total=total)
+        
     except Exception as e:
-        logger.error(f"PostgreSQL list failed: {e}")
+        logger.error(f"PostgreSQL list failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to list sessions: {e}")
 
 
@@ -125,7 +181,6 @@ async def get_session(session_id: str, db: AsyncSession = Depends(get_db)):
         session_repo = SessionRepository(db)
         message_repo = MessageRepository(db)
         
-        # Try PostgreSQL first
         session = await session_repo.get_by_id(session_id)
         
         if not session:
@@ -135,33 +190,29 @@ async def get_session(session_id: str, db: AsyncSession = Depends(get_db)):
         messages = await message_repo.get_history(session_id)
         meta = session.metadata_ or {}
         
-        # Explicitly create lists of dicts
-        msg_list = []
-        for m in messages:
-            msg_list.append({
-                "role": m.role,
-                "content": m.content,
-                "created_at": m.created_at.isoformat() if m.created_at else None,
-                "llm_params": m.llm_params,
-                "usage": m.usage,
-            })
-
-        return {
-            "session_id": session.id,
-            "user_id": session.user_id,
-            "first_name": meta.get("first_name", "User"),
-            "last_name": meta.get("last_name", ""),
-            "title": session.title,
-            "created_at": session.created_at.isoformat() if session.created_at else None,
-            "messages": msg_list,
-        }
+        return SessionResponse(
+            session_id=session.id,
+            user_id=session.user_id,
+            first_name=meta.get("first_name", "User"),
+            last_name=meta.get("last_name", ""),
+            title=session.title,
+            is_archived=session.is_archived,
+            created_at=session.created_at.isoformat() if session.created_at else None,
+            updated_at=session.updated_at.isoformat() if session.updated_at else None,
+            messages=[
+                MessageResponse(
+                    id=m.id,
+                    role=m.role,
+                    content=m.content,
+                    created_at=m.created_at.isoformat() if m.created_at else None,
+                    llm_params=m.llm_params,
+                    usage=m.usage,
+                )
+                for m in messages
+            ],
+            message_count=len(messages),
+        )
             
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get session: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get session: {e}")
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -183,25 +234,102 @@ async def delete_session(session_id: str, db: AsyncSession = Depends(get_db)):
         if not db_deleted and not zep_deleted:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        return {"status": "success", "deleted_from_db": db_deleted, "deleted_from_zep": zep_deleted}
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "deleted_from_db": db_deleted,
+            "deleted_from_zep": zep_deleted,
+        }
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete session: {e}")
 
 
-@router.get("/{session_id}/stats")
+@router.patch("/{session_id}/title")
+async def update_session_title(
+    session_id: str,
+    title: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update session title."""
+    try:
+        session_repo = SessionRepository(db)
+        session = await session_repo.update_title(session_id, title)
+        
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        return {"status": "success", "session_id": session_id, "title": title}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update title: {e}")
+
+
+@router.post("/{session_id}/archive")
+async def archive_session(session_id: str, db: AsyncSession = Depends(get_db)):
+    """Archive a session (soft delete)."""
+    try:
+        session_repo = SessionRepository(db)
+        session = await session_repo.archive(session_id)
+        
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        return {"status": "success", "session_id": session_id, "is_archived": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to archive session: {e}")
+
+
+@router.post("/{session_id}/unarchive")
+async def unarchive_session(session_id: str, db: AsyncSession = Depends(get_db)):
+    """Unarchive a session."""
+    try:
+        session_repo = SessionRepository(db)
+        session = await session_repo.unarchive(session_id)
+        
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        return {"status": "success", "session_id": session_id, "is_archived": False}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to unarchive session: {e}")
+
+
+@router.get("/{session_id}/stats", response_model=SessionStatsResponse)
 async def get_session_stats(session_id: str, db: AsyncSession = Depends(get_db)):
     """Get LLM usage stats for a session."""
-    from db.repositories import LLMInteractionRepository
-    
     try:
+        session_repo = SessionRepository(db)
+        message_repo = MessageRepository(db)
         llm_repo = LLMInteractionRepository(db)
+        
+        # Verify session exists
+        if not await session_repo.exists(session_id):
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        message_count = await message_repo.count(session_id)
         stats = await llm_repo.get_session_stats(session_id)
-        return stats
+        
+        return SessionStatsResponse(
+            session_id=session_id,
+            message_count=message_count,
+            **stats,
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {e}")
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sync Routes
+# ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/sync")
 async def sync_sessions():
@@ -230,17 +358,17 @@ async def sync_session_graph(session_id: str, db: AsyncSession = Depends(get_db)
     """Sync graph data for the user of this session."""
     try:
         session_repo = SessionRepository(db)
-        session = await session_repo.get_by_id(session_id)
+        user_id = await session_repo.get_user_id(session_id)
         
-        if not session:
+        if not user_id:
             raise HTTPException(status_code=404, detail="Session not found")
         
         from sync_service import sync_graph_for_user
-        graph = await sync_graph_for_user(session.user_id)
+        graph = await sync_graph_for_user(user_id)
         
         return {
             "status": "success",
-            "user_id": session.user_id,
+            "user_id": user_id,
             "nodes": len(graph.get("nodes", [])) if graph else 0,
             "edges": len(graph.get("edges", [])) if graph else 0,
         }

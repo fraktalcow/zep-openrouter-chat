@@ -5,17 +5,26 @@ These tables complement Zep by providing:
 - Fast local retrieval with proper ordering
 - LLM usage tracking (tokens, cost)
 - Graph data caching
+- RAG document tracking
 """
 
-from datetime import datetime
-from typing import Optional
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Optional, List
 from uuid import uuid4
 
 from sqlalchemy import (
-    String, Text, Integer, Float, DateTime, ForeignKey, Index
+    String, Text, Integer, Float, DateTime, ForeignKey, Index, Boolean, 
+    CheckConstraint, UniqueConstraint
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+def utc_now() -> datetime:
+    """Get current UTC datetime."""
+    return datetime.now(timezone.utc)
 
 
 class Base(DeclarativeBase):
@@ -23,69 +32,152 @@ class Base(DeclarativeBase):
     pass
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# User Model
+# ─────────────────────────────────────────────────────────────────────────────
+
 class User(Base):
-    """User model - mirrors Zep user."""
+    """
+    User model - mirrors Zep user for local caching.
+    
+    Stores user identity and preferences. Acts as the root
+    for all user-related data (sessions, graph cache, etc.)
+    """
     __tablename__ = "users"
     
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    first_name: Mapped[str] = mapped_column(String(255), default="User")
-    last_name: Mapped[str] = mapped_column(String(255), default="")
-    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    first_name: Mapped[str] = mapped_column(String(255), nullable=False, default="User")
+    last_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
     )
     
     # Relationships
-    sessions: Mapped[list["Session"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    graph_cache: Mapped[list["GraphCache"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    sessions: Mapped[List["Session"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
+    graph_cache: Mapped[List["GraphCache"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
+    rag_documents: Mapped[List["RAGDocument"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
+    
+    def __repr__(self) -> str:
+        return f"<User {self.id}: {self.first_name} {self.last_name}>"
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "first_name": self.first_name,
+            "last_name": self.last_name,
+            "email": self.email,
+            "metadata": self.metadata_,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Session Model
+# ─────────────────────────────────────────────────────────────────────────────
 
 class Session(Base):
-    """Session model - mirrors Zep thread with additional local metadata."""
+    """
+    Chat session model - mirrors Zep session with additional local metadata.
+    
+    Each session belongs to a user and contains ordered messages.
+    The zep_session_id links to the corresponding Zep session for
+    memory and graph features.
+    """
     __tablename__ = "sessions"
     
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(64), ForeignKey("users.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     zep_session_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     title: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
-    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
     )
     
     # Relationships
     user: Mapped["User"] = relationship(back_populates="sessions")
-    messages: Mapped[list["Message"]] = relationship(
-        back_populates="session", cascade="all, delete-orphan", order_by="Message.sequence_order"
+    messages: Mapped[List["Message"]] = relationship(
+        back_populates="session", 
+        cascade="all, delete-orphan", 
+        order_by="Message.sequence_order",
+        lazy="selectin"
     )
-    llm_interactions: Mapped[list["LLMInteraction"]] = relationship(
-        back_populates="session", cascade="all, delete-orphan"
+    llm_interactions: Mapped[List["LLMInteraction"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", lazy="dynamic"
     )
     
     __table_args__ = (
         Index("ix_sessions_user_id", "user_id"),
-        Index("ix_sessions_created_at", "created_at"),
+        Index("ix_sessions_created_at", created_at.desc()),
+        Index("ix_sessions_user_created", "user_id", created_at.desc()),
+        Index("ix_sessions_zep_id", "zep_session_id"),
     )
+    
+    def __repr__(self) -> str:
+        return f"<Session {self.id} (user={self.user_id})>"
+    
+    def to_dict(self, include_messages: bool = False) -> dict:
+        """Convert to dictionary for API responses."""
+        result = {
+            "session_id": self.id,
+            "user_id": self.user_id,
+            "title": self.title,
+            "is_archived": self.is_archived,
+            "first_name": self.metadata_.get("first_name", "User"),
+            "last_name": self.metadata_.get("last_name", ""),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_messages:
+            result["messages"] = [m.to_dict() for m in self.messages]
+        return result
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Message Model
+# ─────────────────────────────────────────────────────────────────────────────
 
 class Message(Base):
-    """Chat message with LLM parameters and ordering."""
+    """
+    Chat message with LLM parameters and ordering.
+    
+    Messages are ordered within a session by sequence_order.
+    Stores both human and AI messages with associated metadata.
+    """
     __tablename__ = "messages"
     
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
     )
     session_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("sessions.id", ondelete="CASCADE")
+        String(64), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
     )
-    role: Mapped[str] = mapped_column(String(32))  # user, assistant, system
-    content: Mapped[str] = mapped_column(Text)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
     llm_params: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     usage: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-    sequence_order: Mapped[int] = mapped_column(Integer)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    sequence_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
     
     # Relationships
     session: Mapped["Session"] = relationship(back_populates="messages")
@@ -96,25 +188,55 @@ class Message(Base):
     __table_args__ = (
         Index("ix_messages_session_id", "session_id"),
         Index("ix_messages_session_order", "session_id", "sequence_order"),
+        Index("ix_messages_created_at", created_at.desc()),
+        CheckConstraint("role IN ('user', 'assistant', 'system')", name="ck_role_valid"),
+        UniqueConstraint("session_id", "sequence_order", name="uq_session_sequence"),
     )
+    
+    def __repr__(self) -> str:
+        content_preview = self.content[:30] + "..." if len(self.content) > 30 else self.content
+        return f"<Message {self.id[:8]} ({self.role}): {content_preview}>"
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "role": self.role,
+            "content": self.content,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "llm_params": self.llm_params,
+            "usage": self.usage,
+        }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Graph Cache Model
+# ─────────────────────────────────────────────────────────────────────────────
 
 class GraphCache(Base):
-    """Cached graph nodes from Zep for faster visualization."""
+    """
+    Cached graph nodes from Zep for faster visualization.
+    
+    Zep builds a knowledge graph from conversations.
+    This cache allows fast local rendering without
+    re-fetching from Zep on every page load.
+    """
     __tablename__ = "graph_cache"
     
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
     )
     user_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("users.id", ondelete="CASCADE")
+        String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    node_uuid: Mapped[str] = mapped_column(String(64))
-    node_name: Mapped[str] = mapped_column(String(512))
+    node_uuid: Mapped[str] = mapped_column(String(64), nullable=False)
+    node_name: Mapped[str] = mapped_column(String(512), nullable=False)
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    node_type: Mapped[str] = mapped_column(String(64), default="unknown")
-    edges: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Connected edges
-    synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    node_type: Mapped[str] = mapped_column(String(64), nullable=False, default="unknown")
+    edges: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
     
     # Relationships
     user: Mapped["User"] = relationship(back_populates="graph_cache")
@@ -122,23 +244,47 @@ class GraphCache(Base):
     __table_args__ = (
         Index("ix_graph_cache_user_id", "user_id"),
         Index("ix_graph_cache_node_uuid", "node_uuid", unique=True),
+        Index("ix_graph_cache_synced_at", synced_at.desc()),
     )
+    
+    def __repr__(self) -> str:
+        return f"<GraphCache {self.node_uuid[:8]}: {self.node_name}>"
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "uuid": self.node_uuid,
+            "name": self.node_name,
+            "summary": self.summary,
+            "type": self.node_type,
+            "edges": self.edges,
+        }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LLM Interaction Model
+# ─────────────────────────────────────────────────────────────────────────────
 
 class LLMInteraction(Base):
-    """LLM interaction logs for token/cost tracking."""
+    """
+    LLM interaction logs for token/cost tracking.
+    
+    Tracks every LLM call for analytics and billing.
+    Linked to sessions and optionally to specific messages.
+    """
     __tablename__ = "llm_interactions"
     
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
     )
     session_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("sessions.id", ondelete="CASCADE")
+        String(64), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
     )
     message_id: Mapped[Optional[str]] = mapped_column(
         UUID(as_uuid=False), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
     )
-    model_name: Mapped[str] = mapped_column(String(256))
+    model_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, default="openrouter")
     temperature: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     max_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     prompt_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -146,7 +292,10 @@ class LLMInteraction(Base):
     total_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     duration_seconds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
     
     # Relationships
     session: Mapped["Session"] = relationship(back_populates="llm_interactions")
@@ -154,5 +303,80 @@ class LLMInteraction(Base):
     
     __table_args__ = (
         Index("ix_llm_interactions_session_id", "session_id"),
-        Index("ix_llm_interactions_created_at", "created_at"),
+        Index("ix_llm_interactions_created_at", created_at.desc()),
+        Index("ix_llm_interactions_model", "model_name"),
     )
+    
+    def __repr__(self) -> str:
+        return f"<LLMInteraction {self.id[:8]}: {self.model_name} tokens={self.total_tokens}>"
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "model_name": self.model_name,
+            "provider": self.provider,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "total_tokens": self.total_tokens,
+            "cost": self.cost,
+            "duration_seconds": self.duration_seconds,
+            "error_message": self.error_message,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RAG Document Model
+# ─────────────────────────────────────────────────────────────────────────────
+
+class RAGDocument(Base):
+    """
+    Tracks uploaded documents for RAG.
+    
+    When a user uploads a document, we chunk it and store
+    vectors in Pinecone. This table tracks the documents
+    for management (listing, deleting, etc.).
+    """
+    __tablename__ = "rag_documents"
+    
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    filename: Mapped[str] = mapped_column(String(512), nullable=False)
+    file_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    file_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pinecone_namespace: Mapped[str] = mapped_column(String(256), nullable=False, default="default")
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    
+    # Relationships
+    user: Mapped["User"] = relationship(back_populates="rag_documents")
+    
+    __table_args__ = (
+        Index("ix_rag_documents_user_id", "user_id"),
+        Index("ix_rag_documents_uploaded_at", uploaded_at.desc()),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<RAGDocument {self.id[:8]}: {self.filename}>"
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "filename": self.filename,
+            "file_type": self.file_type,
+            "file_size_bytes": self.file_size_bytes,
+            "chunk_count": self.chunk_count,
+            "pinecone_namespace": self.pinecone_namespace,
+            "uploaded_at": self.uploaded_at.isoformat() if self.uploaded_at else None,
+        }
