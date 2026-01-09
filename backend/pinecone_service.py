@@ -51,6 +51,30 @@ class PineconeService:
                 
         self.index = self.pc.Index(self.index_name)
 
+    def _embed(self, texts: List[str], input_type: str = "passage") -> List[List[float]]:
+        """Generate embeddings using Pinecone Inference API."""
+        if not texts:
+            return []
+            
+        try:
+            # Prepare chunks to avoid batch limits
+            batch_size = 96
+            all_embeddings = []
+            
+            for i in range(0, len(texts), batch_size):
+                batch = texts[i:i + batch_size]
+                embeddings = self.pc.inference.embed(
+                    model=self.settings.DEFAULT_EMBEDDING_MODEL,
+                    inputs=batch,
+                    parameters={"input_type": input_type}
+                )
+                all_embeddings.extend([e["values"] for e in embeddings])
+                
+            return all_embeddings
+        except Exception as e:
+            logger.error(f"Embedding failed: {e}")
+            raise
+
     def add_documents(
         self, 
         documents: List[Dict[str, Any]],
@@ -69,18 +93,30 @@ class PineconeService:
         self._ensure_resources()
         ns = namespace or self.namespace
         
+        # Generate embeddings
+        texts = [doc["text"] for doc in documents]
+        try:
+            embeddings = self._embed(texts, input_type="passage")
+        except Exception as e:
+            logger.error(f"Failed to generate embeddings for upload: {e}")
+            raise
+            
         # Prepare records for Pinecone
-        # Note: 'values' are empty as we rely on server-side embedding via 'create_index_for_model'
-        # The text to embed must be in metadata match 'field_map' key ('chunk_text')
         vectors = []
         for i, doc in enumerate(documents):
             # Generate a stable-ish ID
             chunk_hash = hash(doc['text']) % 1000000
             vector_id = f"{doc.get('metadata', {}).get('filename', 'doc')}_chunk_{i}_{chunk_hash}"
             
+            # Use computed embedding if valid
+            values = embeddings[i] if i < len(embeddings) else []
+            if not values:
+                 logger.warning(f"Empty embedding for doc {i}")
+                 continue
+
             vector = {
                 "id": vector_id,
-                "values": [], 
+                "values": values, 
                 "metadata": {
                     "chunk_text": doc["text"],
                     **doc.get("metadata", {})
@@ -94,7 +130,7 @@ class PineconeService:
             batch = vectors[i:i + batch_size]
             self.index.upsert(vectors=batch, namespace=ns)
         
-        return {"added": len(documents), "namespace": ns}
+        return {"added": len(vectors), "namespace": ns}
     
     def search(
         self, 
@@ -104,33 +140,30 @@ class PineconeService:
         rerank: bool = False
     ) -> List[Dict[str, Any]]:
         """
-        Semantic search with optional reranking.
+        Semantic search with explicit embedding generation.
         """
         self._ensure_resources()
         ns = namespace or self.namespace
         k = top_k or self.top_k
         
-        # For integrated inference index, we pass the query string in 'inputs'
-        # and Pinecone handles embedding it.
         try:
+            # Generate query embedding
+            embeddings = self._embed([query], input_type="query")
+            if not embeddings:
+                return []
+            
+            query_vector = embeddings[0]
+            
             results = self.index.search(
                 namespace=ns,
-                query=query, # Some SDK versions accept query string directly for inference indexes
+                vector=query_vector,
                 top_k=k,
-                # If query param doesn't work for inference, use:
-                # inputs={"text": query} 
-                # But typically usage is index.search(q=..., ...) or similar
+                include_metadata=True
             )
-        except TypeError:
-            # Fallback to dictionary styled params if direct arg fails
-             results = self.index.search(
-                namespace=ns,
-                query={"inputs": {"text": query}, "top_k": k}
-            )
+        except Exception as e:
+            logger.error(f"Search failed: {e}")
+            return []
 
-        # Handle reranking (client-side for now or via another call if supported)
-        # Assuming simple search for now as rerank param in search() is not standard in all SDKs
-        
         # Format results
         hits = []
         for hit in results.get("matches", []):

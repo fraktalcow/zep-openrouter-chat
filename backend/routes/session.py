@@ -57,6 +57,7 @@ class SessionListItem(BaseModel):
     is_archived: bool = False
     created_at: Optional[str] = None
     message_count: int = 0
+    last_model: Optional[str] = None
 
 
 class SessionListResponse(BaseModel):
@@ -156,6 +157,8 @@ async def list_sessions(
         for s in sessions:
             meta = s.metadata_ or {}
             msg_count = await message_repo.count(s.id)
+            last_model = await message_repo.get_last_model_used(s.id)
+            
             result.append(SessionListItem(
                 session_id=s.id,
                 user_id=s.user_id,
@@ -165,6 +168,7 @@ async def list_sessions(
                 is_archived=s.is_archived,
                 created_at=s.created_at.isoformat() if s.created_at else None,
                 message_count=msg_count,
+                last_model=last_model,
             ))
         
         return SessionListResponse(sessions=result, total=total)

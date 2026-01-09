@@ -55,15 +55,21 @@ export function createLoadingMessage(modelDisplayName) {
     if (!chatBox) return null;
     
     const loadingMsgEl = document.createElement("div");
-    loadingMsgEl.className = "message assistant loading";
+    loadingMsgEl.className = "message assistant loading-container";
     
     if (modelDisplayName) {
         loadingMsgEl.setAttribute("data-model", modelDisplayName);
     }
     
     loadingMsgEl.innerHTML = `
-        <div class="typing-indicator"><span></span><span></span><span></span></div>
-        <span class="loading-status" style="font-size: 0.75rem; color: ${COLORS.surface2}; margin-left: 10px;">Waiting for response...</span>
+        <div class="loading-visual">
+            <div class="loading-orb"></div>
+            <div class="loading-wave"></div>
+        </div>
+        <div class="loading-content">
+            <div class="loading-text">Generating...</div>
+            <div class="loading-meta">Processing...</div>
+        </div>
     `;
     chatBox.appendChild(loadingMsgEl);
     scrollToBottom();
@@ -78,10 +84,18 @@ export function createLoadingMessage(modelDisplayName) {
  */
 export function updateLoadingStatus(element, statusText, color = null) {
     if (!element) return;
-    const statusSpan = element.querySelector(".loading-status");
-    if (statusSpan) {
-        statusSpan.textContent = statusText;
-        if (color) statusSpan.style.color = color;
+    const metaSpan = element.querySelector(".loading-meta");
+    const textSpan = element.querySelector(".loading-text");
+    
+    // Update the detailed status
+    if (metaSpan) {
+        metaSpan.textContent = statusText;
+        if (color) metaSpan.style.color = color;
+    }
+    
+    // Update the main text based on content
+    if (textSpan && statusText.includes("tokens")) {
+        textSpan.textContent = "Generating...";
     }
 }
 
@@ -114,9 +128,8 @@ export function displayContextBlock(data) {
     details.innerHTML = `
         <summary class="context-main-summary">
             <div class="context-header-left">
-                <i class="fa-solid fa-brain" style="font-size: 0.9rem;"></i>
-                <span>Zep Memory Context</span>
-                <span class="context-badge">Live</span>
+                <i class="fa-solid fa-layer-group" style="font-size: 0.9rem;"></i>
+                <span>Context Block</span>
             </div>
             <i class="fa-solid fa-chevron-down toggle-icon"></i>
         </summary>

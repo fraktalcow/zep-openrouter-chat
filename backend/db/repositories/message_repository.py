@@ -127,3 +127,20 @@ class MessageRepository:
             await self.db.flush()
             return message
         return None
+
+    async def get_last_model_used(self, session_id: str) -> Optional[str]:
+        """Get the model name from the last assistant message."""
+        result = await self.db.execute(
+            select(Message.llm_params)
+            .where(
+                Message.session_id == session_id,
+                Message.role == "assistant",
+                Message.llm_params.is_not(None)
+            )
+            .order_by(Message.sequence_order.desc())
+            .limit(1)
+        )
+        params = result.scalar_one_or_none()
+        if params and isinstance(params, dict):
+            return params.get("model")
+        return None

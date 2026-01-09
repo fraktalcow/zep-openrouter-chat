@@ -1,7 +1,14 @@
-.venv
-.env
+# Python
+.venv/
 __pycache__/
 *.pyc
+*.pyo
+
+# Environment
+.env                    
+backend/.env
+
+# Project
 docs/
 tests/
 uv.lock

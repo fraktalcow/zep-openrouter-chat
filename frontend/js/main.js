@@ -216,7 +216,9 @@ async function renderSessionsModal() {
                         <div class="session-info">
                             <div class="session-name">${s.first_name || 'User'} ${s.last_name || ''}</div>
                             <div class="session-meta">
-                                <span>${shortId}</span> • <span style="font-size: 0.7rem; opacity: 0.8">${dateStr}</span>
+                                <span>${shortId}</span> 
+                                ${s.last_model ? `<span class="session-model-badge">${s.last_model.split('/').pop().replace(':free', '')}</span>` : ''}
+                                • <span style="font-size: 0.7rem; opacity: 0.8">${dateStr}</span>
                             </div>
                         </div>
                         <button class="session-delete" onclick="event.stopPropagation(); deleteSessionById('${s.session_id}')">✕</button>
@@ -268,7 +270,14 @@ async function loadSession(sessionId) {
                 // Let's assume we simply append.
                 // If it looks wrong we fix it.
                 if (msg.role && msg.content) {
-                     UI.addMessage(msg.role, msg.content);
+                     const modelId = msg.llm_params?.model;
+                     const displayModel = modelId ? modelId.split('/').pop().replace(':free', '') : null;
+                     const msgEl = UI.addMessage(msg.role, msg.content, displayModel);
+                     
+                     // Also restore usage metrics if available
+                     if (msg.role === 'assistant' && msg.usage && msgEl) {
+                         UI.displayUsageMetrics(msgEl, msg.usage);
+                     }
                 }
             });
         }
