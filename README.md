@@ -6,7 +6,7 @@ Chat application with **Zep memory**, **OpenRouter LLM**, **Pinecone RAG**, and 
 
 ```bash
 # 1. Start database
-./db.sh
+docker compose up -d
 
 # 2. Set up environment
 cp backend/.env.example backend/.env
@@ -57,11 +57,10 @@ Open http://localhost:8000
 ## Database Commands
 
 ```bash
-./db.sh start   # Start PostgreSQL (default)
-./db.sh stop    # Stop PostgreSQL
-./db.sh reset   # Delete all data and volume
-./db.sh logs    # Stream container logs
-./db.sh status  # Check if running
+docker compose up -d      # Start PostgreSQL (detached)
+docker compose down       # Stop and remove containers
+docker compose logs -f    # Stream logs
+
 ```
 
 ## Data Flow
@@ -84,7 +83,6 @@ Open http://localhost:8000
 ## Project Structure
 
 ```
-├── db.sh                 # Database start/stop script
 ├── docker-compose.yml    # PostgreSQL container
 ├── run.py                # Application entry point
 ├── backend/

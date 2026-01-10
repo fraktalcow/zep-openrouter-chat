@@ -106,9 +106,8 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
     zep_service = get_zep_service()
     openrouter_service = get_openrouter_service()
     
-    # Persist user message to PostgreSQL
-    background_tasks.add_task(
-        _persist_message,
+    # Persist user message to PostgreSQL immediately to ensure Sequence Order covers User -> Assistant
+    await _persist_message(
         request.session_id,
         "user",
         request.message,

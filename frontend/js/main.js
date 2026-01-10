@@ -261,7 +261,7 @@ async function loadSession(sessionId) {
         
         // Render history
         if (data.messages && Array.isArray(data.messages)) {
-            data.messages.reverse().forEach(msg => { // Zep usually returns newest first? Check Zep docs. Actually usually oldest first for chat.
+            data.messages.forEach(msg => { // Zep usually returns newest first? Check Zep docs. Actually usually oldest first for chat.
                 // If newest first, we reverse. If oldest first, we don't.
                 // Assuming standard cronological or handled by UI loop.
                 // Let's assume returned in list order.
