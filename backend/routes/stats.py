@@ -12,7 +12,6 @@ from db.repositories import (
     MessageRepository,
     LLMInteractionRepository,
     UserRepository,
-    RAGDocumentRepository,
 )
 from logger import logger
 
@@ -28,7 +27,6 @@ class SystemStatsResponse(BaseModel):
     user_count: int
     session_count: int
     message_count: int
-    document_count: int
     total_tokens: int
     total_cost: float
     
@@ -70,8 +68,6 @@ async def get_system_stats(db: AsyncSession = Depends(get_db)):
         session_repo = SessionRepository(db)
         user_repo = UserRepository(db)
         llm_repo = LLMInteractionRepository(db)
-        rag_repo = RAGDocumentRepository(db)
-        
         user_count = await user_repo.count()
         session_count = await session_repo.count(include_archived=True)
         
@@ -79,9 +75,6 @@ async def get_system_stats(db: AsyncSession = Depends(get_db)):
         from sqlalchemy import text
         msg_result = await db.execute(text("SELECT COUNT(*) FROM messages"))
         message_count = msg_result.scalar() or 0
-        
-        # Get RAG stats
-        rag_stats = await rag_repo.get_stats()
         
         # Get LLM totals
         model_usage = await llm_repo.get_model_usage(limit=100)
@@ -92,7 +85,6 @@ async def get_system_stats(db: AsyncSession = Depends(get_db)):
             user_count=user_count,
             session_count=session_count,
             message_count=message_count,
-            document_count=rag_stats["document_count"],
             total_tokens=total_tokens,
             total_cost=total_cost,
         )

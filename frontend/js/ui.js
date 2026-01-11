@@ -285,46 +285,7 @@ export function setElementColor(id, color) {
     if (el) el.style.color = color;
 }
 
-/**
- * Render RAG sources as an expandable block.
- * @param {{text: string, score: number, metadata?: object}[]} sources - RAG chunks
- * @returns {HTMLElement|null} The sources element
- */
-export function renderRagSources(sources) {
-    const chatBox = getChatBox();
-    if (!chatBox || !sources?.length) return null;
-    
-    const div = document.createElement("div");
-    div.className = "rag-sources";
-    div.style.cssText = "margin: 0.5rem 1rem;";
-    
-    const details = document.createElement("details");
-    const summary = document.createElement("summary");
-    summary.style.cssText = `cursor: pointer; color: ${COLORS.teal}; font-size: 0.8rem; font-family: var(--font-mono);`;
-    summary.innerHTML = `<strong>RAG Context</strong> (${sources.length} chunks)`;
-    details.appendChild(summary);
 
-    const content = document.createElement("div");
-    content.className = "rag-content";
-    content.style.cssText = `font-size: 0.75rem; padding: 0.5rem; border-left: 2px solid ${COLORS.surface2}; margin-top: 0.3rem; color: ${COLORS.subtext0};`;
-    
-    sources.forEach((source, i) => {
-        const item = document.createElement("div");
-        item.style.marginBottom = "0.8rem";
-        item.innerHTML = `
-            <div style="font-weight:600; color: ${COLORS.blue}; margin-bottom: 2px;">Ref ${i+1} (Score: ${source.score.toFixed(3)})</div>
-            <div style="white-space: pre-wrap; font-family: var(--font-mono);">${source.text}</div>
-        `;
-        content.appendChild(item);
-    });
-    
-    details.appendChild(content);
-    div.appendChild(details);
-    
-    chatBox.appendChild(div);
-    scrollToBottom();
-    return div;
-}
 
 /**
  * Display usage metrics below an assistant message with minimal pill design.

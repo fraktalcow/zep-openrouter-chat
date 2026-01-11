@@ -5,7 +5,6 @@ These tables complement Zep by providing:
 - Fast local retrieval with proper ordering
 - LLM usage tracking (tokens, cost)
 - Graph data caching
-- RAG document tracking
 """
 
 from __future__ import annotations

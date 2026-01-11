@@ -3,7 +3,7 @@ FastAPI server with PostgreSQL and Zep integration.
 
 Serves:
 - Static frontend files
-- API routes for chat, sessions, graph, memory, and RAG
+- API routes for chat, sessions, graph, and memory
 """
 
 import uvicorn

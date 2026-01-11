@@ -122,14 +122,46 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
             content=request.message,
             return_context=True
         )
-        # Also get context separately as a fallback
+        # Fallback/Refresh context
         tasks['zep_context'] = zep_service.get_context(session_id=request.session_id)
-    
-        if zep_context:
-            context_sections["memory_section"] = zep_context
-            logger.info(f"[Chat] Zep context block set, len={len(zep_context)}")
-        else:
-            logger.warning("[Chat] No Zep context returned from either method")
+        
+        # Graph search
+        if request.use_retrieval:
+            tasks['graph'] = zep_service.search_graph(query=request.message)
+
+    # Await all tasks
+    results_map = {}
+    if tasks:
+        task_names = list(tasks.keys())
+        task_values = await asyncio.gather(*tasks.values(), return_exceptions=True)
+        results_map = dict(zip(task_names, task_values))
+
+    # Process Zep Context
+    zep_context = results_map.get('zep_add') or results_map.get('zep_context')
+    if isinstance(zep_context, Exception):
+        logger.error(f"[Chat] Zep error: {zep_context}")
+        zep_context = None
+
+    if zep_context:
+        context_sections["memory_section"] = zep_context
+        logger.info(f"[Chat] Zep context block set, len={len(zep_context)}")
+
+    # Process Graph
+    if 'graph' in results_map:
+        graph_res = results_map['graph']
+        if isinstance(graph_res, Exception):
+            logger.error(f"[Chat] Graph error: {graph_res}")
+        elif graph_res:
+            graph_lines = []
+            for node in graph_res:
+                name = node.get("name", "Unknown")
+                fct = node.get("fact", "")
+                if fct:
+                    graph_lines.append(f"- {name}: {fct}")
+            
+            if graph_lines:
+                context_sections["graph_section"] = "Relevant Knowledge Graph Facts:\n" + "\n".join(graph_lines)
+                logger.info(f"[Chat] Graph included {len(graph_lines)} facts")
 
     # Build prompt
     sections = []

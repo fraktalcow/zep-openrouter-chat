@@ -7,7 +7,6 @@ Provides clean abstractions over database models for:
 - Messages
 - LLM Interactions
 - Graph Cache
-- RAG Documents
 """
 
 from db.repositories.user_repository import UserRepository

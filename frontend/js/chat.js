@@ -46,16 +46,6 @@ export async function sendMessage(state) {
     const useMemory = true; // Always use memory
     const useRetrieval = true; // Always use graph retrieval
     
-    // Enable RAG based on user toggle
-    const ragToggle = document.getElementById("rag-toggle");
-    const useRag = ragToggle ? ragToggle.checked : true;
-    
-    // Update indicator visibility to match state (visual feedback)
-    const ragIndicator = document.getElementById("rag-indicator");
-    if (ragIndicator) {
-        ragIndicator.style.display = useRag ? "block" : "none";
-    }
-
     // Show loading
     let loadingMsgEl = UI.createLoadingMessage(modelName);
     const startTime = Date.now();
@@ -74,7 +64,6 @@ export async function sendMessage(state) {
             message: text,
             use_memory: useMemory,
             use_retrieval: useRetrieval,
-            use_rag: useRag,
             use_ai: useAi,
             model_name: modelId,
             temperature: temperature,
@@ -110,10 +99,7 @@ export async function sendMessage(state) {
                         UI.updateLoadingStatus(loadingMsgEl, data.message, COLORS.teal);
                     }
                     
-                    // RAG Sources
-                    else if (data.type === "rag_sources") {
-                        UI.renderRagSources(data.chunks);
-                    }
+
                     
                     // Context Block Debug -> Render it
                     else if (data.type === "context") {
