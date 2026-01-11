@@ -21,7 +21,6 @@ from db.models import (
     Message,
     GraphCache,
     LLMInteraction,
-    RAGDocument,
 )
 
 __all__ = [
@@ -41,5 +40,4 @@ __all__ = [
     "Message",
     "GraphCache",
     "LLMInteraction",
-    "RAGDocument",
 ]

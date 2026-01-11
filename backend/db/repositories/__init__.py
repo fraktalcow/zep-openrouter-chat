@@ -15,7 +15,6 @@ from db.repositories.session_repository import SessionRepository
 from db.repositories.message_repository import MessageRepository
 from db.repositories.llm_repository import LLMInteractionRepository
 from db.repositories.graph_repository import GraphRepository
-from db.repositories.rag_repository import RAGDocumentRepository
 
 __all__ = [
     "UserRepository",
@@ -23,5 +22,4 @@ __all__ = [
     "MessageRepository",
     "LLMInteractionRepository",
     "GraphRepository",
-    "RAGDocumentRepository",
 ]

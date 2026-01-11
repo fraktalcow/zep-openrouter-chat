@@ -1,6 +1,6 @@
 # Zep OpenRouter Chat
 
-Chat application with **Zep memory**, **OpenRouter LLM**, **Pinecone RAG**, and **PostgreSQL persistence**.
+Chat application with **Zep memory**, **OpenRouter LLM**, and **PostgreSQL persistence**.
 
 ## Quick Start
 
@@ -36,7 +36,6 @@ Open http://localhost:8000
 │  ├─ /chat       ────────────► OpenRouter (LLM)              │
 │  ├─ /session    ────────────► Zep Cloud (Memory/Graph)      │
 │  ├─ /graph      ────────────► PostgreSQL (Persistence)      │
-│  ├─ /rag        ────────────► Pinecone (Vector Search)      │
 │  └─ /stats                                                   │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -49,8 +48,7 @@ Open http://localhost:8000
 │  ├─ sessions        - Chat sessions                          │
 │  ├─ messages        - Message history with LLM params        │
 │  ├─ llm_interactions - Token/cost tracking                   │
-│  ├─ graph_cache     - Zep graph node cache                   │
-│  └─ rag_documents   - Uploaded document tracking             │
+│  └─ graph_cache     - Zep graph node cache                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -68,7 +66,7 @@ docker compose logs -f    # Stream logs
 **On Chat Message:**
 
 1. User message → Backend → Zep (add to memory)
-2. Parallel retrieval: Zep context + Pinecone RAG (if enabled)
+2. Parallel retrieval: Zep context
 3. Build prompt with context → OpenRouter LLM → Stream response
 4. Background: Persist message + log LLM interaction to PostgreSQL
 5. Background: Add assistant response to Zep
@@ -78,7 +76,6 @@ docker compose logs -f    # Stream logs
 |-------|------|---------|
 | PostgreSQL | Messages, sessions, LLM metrics | Fast local queries, analytics |
 | Zep Cloud | Memory, facts, knowledge graph | AI context, entity extraction |
-| Pinecone | Document embeddings | RAG retrieval |
 
 ## Project Structure
 

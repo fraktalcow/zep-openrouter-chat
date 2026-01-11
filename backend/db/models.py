@@ -64,9 +64,6 @@ class User(Base):
     graph_cache: Mapped[List["GraphCache"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", lazy="selectin"
     )
-    rag_documents: Mapped[List["RAGDocument"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
-    )
     
     def __repr__(self) -> str:
         return f"<User {self.id}: {self.first_name} {self.last_name}>"
@@ -328,55 +325,4 @@ class LLMInteraction(Base):
         }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# RAG Document Model
-# ─────────────────────────────────────────────────────────────────────────────
 
-class RAGDocument(Base):
-    """
-    Tracks uploaded documents for RAG.
-    
-    When a user uploads a document, we chunk it and store
-    vectors in Pinecone. This table tracks the documents
-    for management (listing, deleting, etc.).
-    """
-    __tablename__ = "rag_documents"
-    
-    id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
-    )
-    user_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
-    filename: Mapped[str] = mapped_column(String(512), nullable=False)
-    file_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    file_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    pinecone_namespace: Mapped[str] = mapped_column(String(256), nullable=False, default="default")
-    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
-    uploaded_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utc_now
-    )
-    
-    # Relationships
-    user: Mapped["User"] = relationship(back_populates="rag_documents")
-    
-    __table_args__ = (
-        Index("ix_rag_documents_user_id", "user_id"),
-        Index("ix_rag_documents_uploaded_at", uploaded_at.desc()),
-    )
-    
-    def __repr__(self) -> str:
-        return f"<RAGDocument {self.id[:8]}: {self.filename}>"
-    
-    def to_dict(self) -> dict:
-        """Convert to dictionary for API responses."""
-        return {
-            "id": self.id,
-            "filename": self.filename,
-            "file_type": self.file_type,
-            "file_size_bytes": self.file_size_bytes,
-            "chunk_count": self.chunk_count,
-            "pinecone_namespace": self.pinecone_namespace,
-            "uploaded_at": self.uploaded_at.isoformat() if self.uploaded_at else None,
-        }

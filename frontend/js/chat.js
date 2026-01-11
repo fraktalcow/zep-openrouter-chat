@@ -46,9 +46,15 @@ export async function sendMessage(state) {
     const useMemory = true; // Always use memory
     const useRetrieval = true; // Always use graph retrieval
     
-    // Auto-enable RAG if documents are indexed (indicator is visible)
+    // Enable RAG based on user toggle
+    const ragToggle = document.getElementById("rag-toggle");
+    const useRag = ragToggle ? ragToggle.checked : true;
+    
+    // Update indicator visibility to match state (visual feedback)
     const ragIndicator = document.getElementById("rag-indicator");
-    const useRag = ragIndicator?.style.display !== "none";
+    if (ragIndicator) {
+        ragIndicator.style.display = useRag ? "block" : "none";
+    }
 
     // Show loading
     let loadingMsgEl = UI.createLoadingMessage(modelName);

@@ -9,7 +9,6 @@ from textwrap import dedent
 
 from openrouter_service import get_openrouter_service
 from zep_service import get_zep_service
-from pinecone_service import get_pinecone_service
 from logger import logger
 
 router = APIRouter()
@@ -23,12 +22,6 @@ You are a helpful assistant with access to conversation history and knowledge gr
 
 # Knowledge Graph
 {graph_section}
-
-# RAG Context (Relevant Documents)
-{rag_section}
-Use the above RAG context to answer the query if relevant. 
-Always cite the source using brackets like [1], [2] when using information from the RAG Context.
-If the context doesn't contain the answer, say so, but you can rely on your general knowledge.
 
 # User Query
 {query}
@@ -99,8 +92,7 @@ async def _log_llm_interaction(
 
 async def _stream_chat_response(request: ChatRequest, background_tasks: BackgroundTasks):
     """Stream chat response with context from Zep memory and graph."""
-    context_sections = {"memory_section": "", "graph_section": "", "rag_section": ""}
-    rag_chunks = []
+    context_sections = {"memory_section": "", "graph_section": ""}
     use_zep = request.use_memory or request.use_retrieval
     
     zep_service = get_zep_service()
@@ -133,101 +125,23 @@ async def _stream_chat_response(request: ChatRequest, background_tasks: Backgrou
         # Also get context separately as a fallback
         tasks['zep_context'] = zep_service.get_context(session_id=request.session_id)
     
-    if request.use_rag:
-        pinecone = get_pinecone_service()
-        loop = asyncio.get_running_loop()
-        tasks['rag'] = loop.run_in_executor(
-            None, lambda: pinecone.search(query=request.message, top_k=5, rerank=True)
-        )
-    
-    if tasks:
-        logger.info(f"[Chat] Retrieval tasks: {list(tasks.keys())}")
-        try:
-            results = await asyncio.wait_for(
-                asyncio.gather(*tasks.values(), return_exceptions=True), timeout=10.0
-            )
-        except asyncio.TimeoutError:
-            logger.warning("[Chat] Retrieval timed out")
-            results = [TimeoutError()] * len(tasks)
-        
-        results_map = dict(zip(tasks.keys(), results))
-
-        # Process Zep Context (Summary + Facts)
-        zep_context = None
-        if 'zep_add' in results_map:
-            res = results_map['zep_add']
-            if isinstance(res, Exception):
-                logger.error(f"Zep add_memory Error: {res}")
-            elif res:
-                zep_context = res
-                logger.info(f"[Chat] Got context from add_memory: len={len(res)}")
-        
-        # Fallback to get_context if add_memory didn't return context
-        if not zep_context and 'zep_context' in results_map:
-            res = results_map['zep_context']
-            if isinstance(res, Exception):
-                logger.error(f"Zep get_context Error: {res}")
-            elif res:
-                zep_context = res
-                logger.info(f"[Chat] Got context from get_context fallback: len={len(res)}")
-        
         if zep_context:
             context_sections["memory_section"] = zep_context
             logger.info(f"[Chat] Zep context block set, len={len(zep_context)}")
         else:
             logger.warning("[Chat] No Zep context returned from either method")
-                
-        # Process RAG
-        if 'rag' in results_map:
-            res = results_map['rag']
-            if isinstance(res, Exception):
-                logger.error(f"RAG Error: {res}")
-            elif res:
-                rag_texts = []
-                # Sort by score just in case
-                valid_results = sorted([r for r in res if r.get("score", 0) > 0.4], key=lambda x: x['score'], reverse=True)
-                
-                for i, r in enumerate(valid_results):
-                    citation_idx = i + 1
-                    source_name = r.get("metadata", {}).get("filename", "unknown")
-                    
-                    # Add to context text
-                    rag_texts.append(f"[{citation_idx}] {r['text']} (Source: {source_name})")
-                    
-                    # Add to client payload
-                    rag_chunks.append({
-                        "text": r["text"], 
-                        "score": r["score"],
-                        "citation_index": citation_idx,
-                        "source": source_name
-                    })
-                    
-                if rag_texts:
-                    context_sections["rag_section"] = "\n\n".join(rag_texts)
-                    yield f"data: {json.dumps({'type': 'rag_sources', 'chunks': rag_chunks})}\n\n"
 
     # Build prompt
-    # Use template if RAG is present, otherwise fallback to simpler concatenation
-    if context_sections["rag_section"]:
-         # Replace placeholders
-         prompt = CONTEXT_TEMPLATE.format(
-             memory_section=context_sections.get("memory_section", "No memory context."),
-             graph_section=context_sections.get("graph_section", "No graph data."),
-             rag_section=context_sections["rag_section"],
-             query=request.message
-         )
+    sections = []
+    if context_sections.get("memory_section"):
+        sections.append(f"# Conversation Memory\n{context_sections['memory_section']}")
+    if context_sections.get("graph_section"):
+        sections.append(f"# Knowledge Graph\n{context_sections['graph_section']}")
+    
+    if sections:
+        prompt = "\n\n".join(sections) + f"\n\n# User Query\n{request.message}\n\nRespond naturally."
     else:
-        # Legacy/Simple assembly for non-RAG or empty RAG
-        sections = []
-        if context_sections["memory_section"]:
-            sections.append(f"# Conversation Memory\n{context_sections['memory_section']}")
-        if context_sections["graph_section"]:
-            sections.append(f"# Knowledge Graph\n{context_sections['graph_section']}")
-        
-        if sections:
-            prompt = "\n\n".join(sections) + f"\n\n# User Query\n{request.message}\n\nRespond naturally."
-        else:
-            prompt = request.message
+        prompt = request.message
     
     logger.info(f"[Chat] Prompt length={len(prompt)}, model={request.model_name}")
     yield f"data: {json.dumps({'type': 'context', 'context_block': {'sections': context_sections}})}\n\n"

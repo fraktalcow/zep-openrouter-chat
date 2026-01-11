@@ -17,26 +17,11 @@ class Settings(BaseSettings):
     # ─────────────────────────────────────────────────────────────────────────
     ZEP_API_KEY: str
     OPENROUTER_API_KEY: str
-    PINECONE_API_KEY: str
-    
-    # ─────────────────────────────────────────────────────────────────────────
-    # Pinecone config
-    # ─────────────────────────────────────────────────────────────────────────
-    PINECONE_INDEX: str = "zep-rag"
-    PINECONE_CLOUD: str = "aws"
-    PINECONE_REGION: str = "us-east-1"
     
     # ─────────────────────────────────────────────────────────────────────────
     # Model defaults
     # ─────────────────────────────────────────────────────────────────────────
     DEFAULT_MODEL: str = "meta-llama/llama-3.2-3b-instruct:free"
-    DEFAULT_EMBEDDING_MODEL: str = "llama-text-embed-v2"
-    
-    # ─────────────────────────────────────────────────────────────────────────
-    # RAG config
-    # ─────────────────────────────────────────────────────────────────────────
-    RAG_TOP_K: int = 5
-    RAG_NAMESPACE: str = "default"
     
     # ─────────────────────────────────────────────────────────────────────────
     # Database config
