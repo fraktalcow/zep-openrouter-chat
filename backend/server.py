@@ -23,7 +23,6 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = (BASE_DIR / "../frontend").resolve()
-ASSETS_DIR = (BASE_DIR / "../assets").resolve()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -116,7 +115,6 @@ app.add_middleware(
 
 # Static file serving
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
-app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
