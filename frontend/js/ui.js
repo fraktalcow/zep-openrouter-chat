@@ -62,41 +62,17 @@ export function createLoadingMessage(modelDisplayName) {
     }
     
     loadingMsgEl.innerHTML = `
-        <div class="loading-visual">
-            <div class="loading-orb"></div>
-            <div class="loading-wave"></div>
-        </div>
         <div class="loading-content">
+            <div class="loading-visual">
+                <div class="loading-orb"></div>
+                <div class="loading-wave"></div>
+            </div>
             <div class="loading-text">Generating...</div>
-            <div class="loading-meta">Processing...</div>
         </div>
     `;
     chatBox.appendChild(loadingMsgEl);
     scrollToBottom();
     return loadingMsgEl;
-}
-
-/**
- * Update the status text in a loading message.
- * @param {HTMLElement} element - Loading message element
- * @param {string} statusText - New status text
- * @param {string|null} color - Optional color override
- */
-export function updateLoadingStatus(element, statusText, color = null) {
-    if (!element) return;
-    const metaSpan = element.querySelector(".loading-meta");
-    const textSpan = element.querySelector(".loading-text");
-    
-    // Update the detailed status
-    if (metaSpan) {
-        metaSpan.textContent = statusText;
-        if (color) metaSpan.style.color = color;
-    }
-    
-    // Update the main text based on content
-    if (textSpan && statusText.includes("tokens")) {
-        textSpan.textContent = "Generating...";
-    }
 }
 
 /**

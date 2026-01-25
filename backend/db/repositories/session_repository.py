@@ -5,7 +5,7 @@ Session repository - CRUD operations for sessions.
 from datetime import datetime, timezone
 from typing import Optional, List
 
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 

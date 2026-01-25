@@ -1,6 +1,5 @@
 """Analytics and stats routes."""
 
-from typing import Optional
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -9,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
 from db.repositories import (
     SessionRepository,
-    MessageRepository,
     LLMInteractionRepository,
     UserRepository,
 )

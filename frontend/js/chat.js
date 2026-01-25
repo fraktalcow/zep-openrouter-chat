@@ -48,12 +48,6 @@ export async function sendMessage(state) {
     
     // Show loading
     let loadingMsgEl = UI.createLoadingMessage(modelName);
-    const startTime = Date.now();
-    const loadingInterval = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        const color = elapsed > CONFIG.LOADING_WARNING_THRESHOLD_S ? COLORS.peach : null;
-        UI.updateLoadingStatus(loadingMsgEl, `Waiting... (${elapsed}s)`, color);
-    }, 1000);
 
     const abortController = new AbortController();
     setTimeout(() => abortController.abort(), CONFIG.REQUEST_TIMEOUT_MS);
@@ -179,7 +173,6 @@ export async function sendMessage(state) {
         if (e.name === 'AbortError') errorText = "⚠️ Request timed out.";
         UI.addMessage("system", errorText);
     } finally {
-        clearInterval(loadingInterval);
         input.disabled = false;
         if (sendBtn) sendBtn.disabled = false;
         input?.focus();
