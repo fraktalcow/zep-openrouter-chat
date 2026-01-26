@@ -13,8 +13,15 @@ import { scheduleGraphRefresh } from './main.js';
  * @param {string} text - Raw text to parse
  * @returns {string} HTML string
  */
-const parseMarkdown = (text) => 
-    typeof marked !== 'undefined' ? marked.parse(text) : text;
+const parseMarkdown = (text) => {
+    if (!text || text.trim() === '') return '';
+    try {
+        return typeof marked !== 'undefined' && marked.parse ? marked.parse(text) : text;
+    } catch (e) {
+        console.warn('Markdown parsing failed:', e);
+        return text;
+    }
+};
 
 /**
  * Send a chat message and stream the response.
@@ -116,7 +123,7 @@ export async function sendMessage(state) {
                             assistantMsgEl = UI.addMessage("assistant", "", modelName);
                         }
                         fullResponse += data.chunk;
-                        if (assistantMsgEl) {
+                        if (assistantMsgEl && fullResponse.trim()) {
                             assistantMsgEl.innerHTML = parseMarkdown(fullResponse);
                         }
                         UI.scrollToBottom();
@@ -130,7 +137,11 @@ export async function sendMessage(state) {
                         }
                         fullResponse = data.response || fullResponse;
                         if (assistantMsgEl) {
-                            assistantMsgEl.innerHTML = parseMarkdown(fullResponse);
+                            if (fullResponse.trim()) {
+                                assistantMsgEl.innerHTML = parseMarkdown(fullResponse);
+                            } else {
+                                assistantMsgEl.innerHTML = '<em>No response generated</em>';
+                            }
                             
                             // Display usage metrics if available
                             if (data.metrics) {
@@ -163,15 +174,27 @@ export async function sendMessage(state) {
             }
         }
         
-        // Zep processes graph asynchronously - poll for updates
+        // Zep processes graph asynchronously - always try to refresh after chat
+        // This ensures graph updates even if response was empty or had errors
         scheduleGraphRefresh();
 
     } catch (e) {
         if (loadingMsgEl?.parentNode) loadingMsgEl.remove();
+        
+        // Ensure we have an assistant message element for error display
+        if (!assistantMsgEl) {
+            assistantMsgEl = UI.addMessage("assistant", "", modelName);
+        }
+        
         let errorText = `Error: ${e.message}`;
         if (e.message.startsWith("API_ERROR:")) errorText = e.message.replace("API_ERROR: ", "⚠️ ");
         if (e.name === 'AbortError') errorText = "⚠️ Request timed out.";
-        UI.addMessage("system", errorText);
+        
+        if (assistantMsgEl) {
+            assistantMsgEl.innerHTML = `<em style="color: var(--ctp-red);">${errorText}</em>`;
+        } else {
+            UI.addMessage("system", errorText);
+        }
     } finally {
         input.disabled = false;
         if (sendBtn) sendBtn.disabled = false;

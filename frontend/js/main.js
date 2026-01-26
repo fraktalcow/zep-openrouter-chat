@@ -14,6 +14,10 @@ export const state = {
     availableSessions: [] 
 };
 
+// Make functions available globally for HTML onclick handlers
+window.refreshGraph = refreshGraph;
+window.resetZoom = Graph.resetZoom;
+
 document.addEventListener("DOMContentLoaded", () => {
     Promise.all([restoreSessionOrInit(), populateModels()]).catch(console.error);
     setupEventListeners();
@@ -106,7 +110,7 @@ async function initSession(forceNew = false) {
         const data = await API.initSession(payload);
         setActiveSession(data);
         document.getElementById("chat-box").innerHTML = "";
-        refreshGraph();
+        refreshGraph(false); // Use cache for initial load
         UI.addMessage("system", "Session initialized.");
     } catch (e) {
         console.error("Session init failed", e);
@@ -272,7 +276,7 @@ async function loadSession(sessionId) {
             });
         }
         
-        refreshGraph();
+        refreshGraph(false); // Use cache for session load
         closeSessionsModal();
         UI.addMessage("system", `Loaded session: ${sessionData.first_name} ${sessionData.last_name}`);
     } catch (e) {
@@ -307,34 +311,57 @@ async function deleteSessionById(sessionId) {
     }
 }
 
-export async function refreshGraph() {
+export async function refreshGraph(forceRefresh = false) {
     try {
-        if (!state.userId) return { nodes: 0, edges: 0 };
-        const data = await API.fetchGraphData(state.userId);
+        if (!state.userId) {
+            console.warn('No userId available for graph refresh');
+            return { nodes: 0, edges: 0 };
+        }
+        
+        const url = forceRefresh ? `/graph/${state.userId}?refresh=true` : `/graph/${state.userId}`;
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
         
         const container = document.getElementById("graph-container");
-        Graph.renderGraph(container, data);
+        if (container) {
+            Graph.renderGraph(container, data);
+        }
 
-        document.getElementById("node-count").textContent = data.nodes?.length || 0;
-        document.getElementById("edge-count").textContent = data.edges?.length || 0;
+        const nodeCountEl = document.getElementById("node-count");
+        const edgeCountEl = document.getElementById("edge-count");
+        
+        if (nodeCountEl) nodeCountEl.textContent = data.nodes?.length || 0;
+        if (edgeCountEl) edgeCountEl.textContent = data.edges?.length || 0;
         
         return { nodes: data.nodes?.length || 0, edges: data.edges?.length || 0 };
     } catch (e) {
-        console.error("Graph refresh failed", e);
+        console.error("Graph refresh failed:", e);
         return { nodes: 0, edges: 0 };
     }
 }
 
 export async function scheduleGraphRefresh() {
-    let lastCounts = await refreshGraph();
-    
-    for (const delay of CONFIG.POLL_DELAYS) {
-        await new Promise(resolve => setTimeout(resolve, delay));
-        const counts = await refreshGraph();
-        if (counts.nodes !== lastCounts.nodes || counts.edges !== lastCounts.edges) {
-            console.log(`Graph updated: ${counts.nodes} nodes, ${counts.edges} edges`);
+    try {
+        // Immediate refresh with force to get latest from Zep
+        let lastCounts = await refreshGraph(true);
+        
+        // Then poll a few times to catch any delayed updates
+        for (const delay of [1000, 3000]) {  // Reduced delays: 1s, 3s
+            await new Promise(resolve => setTimeout(resolve, delay));
+            const counts = await refreshGraph(true);
+            if (counts.nodes !== lastCounts.nodes || counts.edges !== lastCounts.edges) {
+                console.log(`Graph updated: ${counts.nodes} nodes, ${counts.edges} edges`);
+                break; // Stop polling once we see an update
+            }
+            lastCounts = counts;
         }
-        lastCounts = counts;
+    } catch (e) {
+        console.error('Graph refresh scheduling failed:', e);
     }
 }
 

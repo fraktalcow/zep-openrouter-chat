@@ -26,10 +26,15 @@ export function addMessage(role, text, modelName = null) {
         div.setAttribute('data-model', modelName);
     }
     
-    if (typeof marked !== 'undefined') {
-        div.innerHTML = marked.parse(text);
-    } else {
-        div.textContent = text;
+    try {
+        if (typeof marked !== 'undefined' && marked.parse && text) {
+            div.innerHTML = marked.parse(text);
+        } else {
+            div.textContent = text || '';
+        }
+    } catch (e) {
+        console.warn('Markdown parsing failed in addMessage:', e);
+        div.textContent = text || '';
     }
     
     chatBox.appendChild(div);
