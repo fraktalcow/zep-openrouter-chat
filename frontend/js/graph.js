@@ -43,7 +43,7 @@ export function renderGraph(container, graphData) {
     graphData.nodes.map(n => ({
       id: n.uuid,
       label: n.name.length > 20 ? n.name.substring(0, 18) + '...' : n.name,
-      title: `<div style="padding:5px"><strong>${n.name}</strong><br/>${n.summary || 'No details'}</div>`,
+      title: `${n.name}\n${n.summary || 'No details'}`,
       val: 20, // base size
       color: {
         background: COLORS.nodeFill,
