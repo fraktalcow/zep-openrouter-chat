@@ -110,3 +110,4 @@ docker compose logs -f    # Stream logs
 ## License
 
 MIT
+# Updated git config
